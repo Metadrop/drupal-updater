@@ -25,6 +25,10 @@ class UpdateHelperCommand extends Command {
 
   protected string $commitAuthor;
 
+  protected array $packagesToUpdate;
+
+  protected array $updatedPackages = [];
+
   protected function configure()
   {
     $this->setHelp('Update composer packages.
@@ -35,8 +39,8 @@ Update includes:
   - For each package try to update and commit it (recovers previous state if fails)');
     $this->addOption('environments', 'envs', InputOption::VALUE_REQUIRED,'List of drush aliases that are needed to update', '@self');
     $this->addOption('author', 'a', InputOption::VALUE_REQUIRED, 'Git author', 'Drupal <drupal@update-helper>');
-    $this->addOption('security', 's', InputOption::VALUE_OPTIONAL, 'Only update security packages');
-    $this->addOption('no-dev', 'nd', InputOption::VALUE_OPTIONAL, 'Only update main requirements');
+    $this->addOption('security', 's', InputOption::VALUE_OPTIONAL, 'Only update security packages', 0);
+    $this->addOption('no-dev', 'nd', InputOption::VALUE_OPTIONAL, 'Only update main requirements', 0);
   }
 
   protected function initialize(InputInterface $input, OutputInterface $output)
@@ -45,8 +49,8 @@ Update includes:
     $this->output = $output;
     $this->environments = explode(',', $input->getOption('environments'));
     $this->commitAuthor = $input->getOption('author');
-    $this->onlySecurity = $input->hasOption('security');
-    $this->noDev = $input->hasOption('no-dev');
+    $this->onlySecurity = (bool) $input->getOption('security');
+    $this->noDev = (bool) $input->hasOption('no-dev') == 1;
   }
 
   protected function execute(InputInterface $input, OutputInterface $output)
@@ -56,6 +60,8 @@ Update includes:
       $this->consolidateConfiguration();
       $this->updateHelperOutput->printHeader1('2. Checking outdated packages');
       $this->checkOutdatedPackages();
+      $this->updateHelperOutput->printHeader1('3. Updating packages');
+      $this->updatePackages($this->packagesToUpdate);
       return 0;
   }
 
@@ -77,16 +83,14 @@ Update includes:
     if (!$process->isSuccessful()) {
       throw new ProcessFailedException($process);
     }
-    $process_output = $process->getOutput();
-    $this->output->writeln($process_output);
-    return $process_output;
+    return $process;
   }
 
   protected function runComposer(string $command, array $parameters) {
     return $this->runCommand(sprintf('composer %s %s', $command, implode(' ', $parameters)));
   }
 
-  protected function getNoDevParamter(){
+  protected function getNoDevParameter(){
     return $this->noDev ? '--no-dev' : '';
   }
 
@@ -95,8 +99,9 @@ Update includes:
     $this->runDrushComand('cim -y');
 
     foreach ($this->environments as $environment) {
+      $this->output->writeln(sprintf('Consolidating %s environment', $environment));
       $this->runDrushComand('cex -y');
-      $process = $this->runCommand(sprintf(
+      $this->runCommand(sprintf(
         'git add config && git commit -m "CONFIG - Consolidate current configuration on %s" --author="%s" -n || echo "No changes to commit"',
         $environment,
         $this->commitAuthor
@@ -109,25 +114,86 @@ Update includes:
 
   protected function checkOutdatedPackages() {
     if ($this->onlySecurity) {
-      $packages_to_update = $this->runCommand(sprintf('composer audit --locked %s --format plain 2>&1 | grep ^Package | cut -f2 -d: | sort -u', $this->getNoDevParamter()));
+      $packages_to_update = $this->runCommand(sprintf('composer audit --locked %s --format plain 2>&1 | grep ^Package | cut -f2 -d: | sort -u', $this->getNoDevParameter()))->getOutput();
       try {
-        $drupal_security_packages = $this->runCommand('./vendor/bin/drush pm:security --fields=name --format=list 2>/dev/null');
+        $drupal_security_packages = $this->runCommand('./vendor/bin/drush pm:security --fields=name --format=list 2>/dev/null')
+          ->getOutput();
       }
       catch (ProcessFailedException $e) {}
 
       $packages_to_update = sprintf("%s\n%s", $packages_to_update, $drupal_security_packages);
     }
     else {
-      $packages_to_update = $this->runCommand('composer show --locked --direct --name-only $update_no_dev 2>/dev/null');
+      $packages_to_update = $this->runCommand(sprintf('composer show --locked --direct --name-only %s 2>/dev/null', $this->getNoDevParameter()))
+        ->getOutput();
     }
 
-    $packages_to_update_list = explode("\n", $packages_to_update);
-    $packages_to_update_list = array_filter($packages_to_update_list, function ($package) {
-      return preg_match('/^([A-Z0-9_-]*\/[A-Z0-9_-]*)/', $package);
+    $this->packagesToUpdate = explode("\n", $packages_to_update);
+    $this->packagesToUpdate = array_filter($this->packagesToUpdate, function ($package) {
+      return preg_match('/^([A-Za-z0-9_-]*\/[A-Za-z0-9_-]*)/', $package);
     });
+    $this->packagesToUpdate = array_map(function ($package) {
+      return trim($package);
+    }, $this->packagesToUpdate);
 
-    $this->output->writeln($packages_to_update_list);
+    $this->output->writeln(implode("\n", $this->packagesToUpdate));
   }
 
+  protected function updatePackages(array $package_list) {
+    foreach ($package_list as $package) {
+      $this->updatePackage($package);
+    }
+  }
+
+  protected function updatePackage(string $package) {
+    $this->updateHelperOutput->printHeader2(sprintf('Updating: %s', $package));
+    $version_from = trim($this->runCommand(sprintf("composer show --locked %s | grep versions | awk '{print $4}'", $package))->getOutput());
+    try {
+      $this->runComposer('update', [$package, '--with-dependencies']);
+    }
+    catch (ProcessFailedException $e) {
+      $this->output->writeln("\n!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
+      $this->output->writeln($e->getProcess()->getErrorOutput());
+      $this->output->writeln('Updating package FAILED: recovering previous state.');
+      $this->output->writeln('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!');
+      $this->runCommand('git checkout composer.json composer.lock');
+      return;
+    }
+
+    $composer_lock_is_changed = (int) $this->runCommand('git status --porcelain composer.lock | wc -l')->getOutput() > 0;
+
+    if (!$composer_lock_is_changed) {
+      $this->output->writeln(sprintf('Package %s has not been updated', $package));
+      return;
+    }
+
+    $version_to = trim($this->runCommand(sprintf("composer show --locked %s | grep versions | awk '{print $4}'", $package))->getOutput());
+    $this->runCommand('git add composer.json composer.lock');
+
+    if ($this->isDrupalExtension($package)) {
+      $this->runCommand('git add web');
+      $this->runDrushComand('cr');
+      $this->runDrushComand('updb -y');
+      $this->runDrushComand('cex -y');
+      $this->runCommand('git add config');
+    }
+
+    $this->runCommand(sprintf('git commit -m "UPDATE - %s" --author="%s" -n', $package, $this->commitAuthor));
+
+    if ($version_from != $version_to) {
+      $this->output->writeln(sprintf('Package %s has been updated from %s to %s', $package, $version_from, $version_to));
+      $this->updatedPackages[] = sprintf('%s from %s to %s', $package, $version_from, $version_to);
+    }
+
+  }
+
+  protected function isDrupalExtension(string $package) {
+    $package_type = $this->runCommand(sprintf("composer show %s | grep ^type | awk '{print $3}'", $package))->getOutput();
+    return $package_type != 'drupal-library' && str_starts_with($package_type, 'drupal');
+  }
+
+  protected function getPackagesToUpdate() {
+    return $this->packagesToUpdate;
+  }
 
 }

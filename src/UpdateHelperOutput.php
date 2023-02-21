@@ -27,4 +27,8 @@ class UpdateHelperOutput
     $this->output->writeln(sprintf("// %s //\n", strtoupper($text)));
   }
 
+  public function printHeader2(string $text) {
+    $this->output->writeln(sprintf("/// %s ///\n", $text));
+  }
+
 }
