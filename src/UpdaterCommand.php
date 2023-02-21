@@ -27,8 +27,6 @@ class UpdaterCommand extends Command {
 
   protected array $packagesToUpdate;
 
-  protected array $updatedPackages = [];
-
   protected function configure()
   {
     $this->setHelp('Update composer packages.
@@ -55,13 +53,18 @@ Update includes:
 
   protected function execute(InputInterface $input, OutputInterface $output)
   {
+      $this->runCommand('cp composer.lock composer.drupalupdater.lock');
       $this->updaterOutput->printSummary();
       $this->updaterOutput->printHeader1('1. Consolidating configuration');
       $this->consolidateConfiguration();
       $this->updaterOutput->printHeader1('2. Checking outdated packages');
       $this->checkOutdatedPackages();
+      $this->output->writeln('');
       $this->updaterOutput->printHeader1('3. Updating packages');
       $this->updatePackages($this->packagesToUpdate);
+      $this->output->writeln('');
+      $this->updaterOutput->printHeader1('4. Report');
+      $this->report();
       return 0;
   }
 
@@ -186,14 +189,13 @@ Update includes:
 
   }
 
-  protected function report(array $package_list) {
+  protected function report() {
 
-    if (!empty($this->updatedPackages)) {
-      // @todo Composer lock diff!
-    }
-    else {
-      $this->output->writeln('No modules / packages have been updated');
-    }
+    $this->output->writeln(
+      $this->runCommand('composer-lock-diff  --from composer.lock --to  composer.drupalupdater.lock')->getOutput(),
+    );
+
+    $this->runCommand('rm composer.drupalupdater.lock');
 
     if ($this->onlySecurity) {
       $this->updaterOutput->printHeader2('Not Updated Securities (Packagist):');
