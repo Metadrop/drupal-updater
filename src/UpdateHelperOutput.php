@@ -1,6 +1,6 @@
 <?php
 
-namespace DrupalUpdateHelper;
+namespace DrupalUpdater;
 
 use Symfony\Component\Console\Output\OutputInterface;
 
