@@ -9,11 +9,11 @@ use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Process\Exception\ProcessFailedException;
 use Symfony\Component\Process\Process;
 
-class UpdateHelperCommand extends Command {
+class UpdaterCommand extends Command {
 
   protected static $defaultName = 'update';
 
-  protected UpdateHelperOutput $updateHelperOutput;
+  protected UpdaterOutput $updateHelperOutput;
 
   protected OutputInterface $output;
 

@@ -4,7 +4,7 @@ namespace DrupalUpdater;
 
 use Symfony\Component\Console\Output\OutputInterface;
 
-class UpdateHelperOutput
+class UpdaterOutput
 {
 
   protected OutputInterface $output;

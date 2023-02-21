@@ -19,9 +19,9 @@ if (file_exists($autoloadFile = __DIR__ . '/vendor/autoload.php')
 }
 
 use Symfony\Component\Console\Application;
-use DrupalUpdater\UpdateHelperCommand;
+use DrupalUpdater\UpdaterCommand;
 
 
 $app = new Application();
-$app->add(new UpdateHelperCommand());
+$app->add(new UpdaterCommand());
 $app->run();
