@@ -59,23 +59,6 @@ Update includes:
       return 0;
   }
 
-  protected function consolidateConfiguration() {
-    $this->runDrushComand('cr');
-    $this->runDrushComand('cim -y');
-
-    foreach ($this->environments as $environment) {
-      $this->runDrushComand('cex -y');
-      $process = $this->runCommand(sprintf(
-        'git add config && git commit -m "CONFIG - Consolidate current configuration on %s" --author="%s" -n || echo "No changes to commit"',
-        $environment,
-        $this->commitAuthor
-      ));
-    }
-
-    $this->runDrushComand('cr');
-    $this->runDrushComand('cim -y');
-  }
-
   protected function runDrushComand(string $command, array $environments = []) {
     if (empty($environments)) {
       $environments = $this->environments;
@@ -105,6 +88,23 @@ Update includes:
 
   protected function getNoDevParamter(){
     return $this->noDev ? '--no-dev' : '';
+  }
+
+  protected function consolidateConfiguration() {
+    $this->runDrushComand('cr');
+    $this->runDrushComand('cim -y');
+
+    foreach ($this->environments as $environment) {
+      $this->runDrushComand('cex -y');
+      $process = $this->runCommand(sprintf(
+        'git add config && git commit -m "CONFIG - Consolidate current configuration on %s" --author="%s" -n || echo "No changes to commit"',
+        $environment,
+        $this->commitAuthor
+      ));
+    }
+
+    $this->runDrushComand('cr');
+    $this->runDrushComand('cim -y');
   }
 
   protected function checkOutdatedPackages() {
