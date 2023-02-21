@@ -8,7 +8,8 @@
     "require": {
         "symfony/console": "^4 || ^5",
         "symfony/process": "^4 || ^5",
-        "drush/drush": "^10 || ^11"
+        "drush/drush": "^10 || ^11",
+        "davidrjonas/composer-lock-diff": "^1.7"
     },
     "authors": [
         {
