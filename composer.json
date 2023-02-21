@@ -1,9 +1,9 @@
 {
-    "name": "metadrop/drupal-update-helper",
-    "description": "Helps to update drupal modules",
+    "name": "metadrop/drupal-updater",
+    "description": "Update drupal project dependencies",
     "type": "library",
     "bin": [
-        "drupal-update-helper"
+        "drupal-updater"
     ],
     "require": {
         "symfony/console": "^4 || ^5",
