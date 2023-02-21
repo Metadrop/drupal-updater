@@ -8,7 +8,7 @@
     "require": {
         "symfony/console": "^4 || ^5",
         "symfony/process": "^4 || ^5",
-        "drush/drush": "^11"
+        "drush/drush": "^10 || ^11"
     },
     "authors": [
         {
