@@ -182,9 +182,48 @@ Update includes:
 
     if ($version_from != $version_to) {
       $this->output->writeln(sprintf('Package %s has been updated from %s to %s', $package, $version_from, $version_to));
-      $this->updatedPackages[] = sprintf('%s from %s to %s', $package, $version_from, $version_to);
     }
 
+  }
+
+  protected function report(array $package_list) {
+
+    if (!empty($this->updatedPackages)) {
+      // @todo Composer lock diff!
+    }
+    else {
+      $this->output->writeln('No modules / packages have been updated');
+    }
+
+    if ($this->onlySecurity) {
+      $this->updateHelperOutput->printHeader2('Not Updated Securities (Packagist):');
+      $this->output->writeln(
+        $this->runCommand('composer audit --locked $update_no_dev --format plain 2>&1 | grep ^Package | cut -f2 -d: | sort -u')->getOutput(),
+      );
+
+      $this->updateHelperOutput->printHeader2('Not Updated Securities (Drupal):');
+      try {
+        $this->output->writeln(
+          $this->runCommand('./vendor/bin/drush pm:security --fields=name --format=list 2>/dev/null')->getOutput(),
+        );
+      }
+      catch (ProcessFailedException $e) {
+        $this->output->writeln($e->getProcess()->getErrorOutput());
+      }
+
+    }
+    else {
+      $this->updateHelperOutput->printHeader2('Not Updated Packages (Direct):');
+      $this->output->writeln(
+        $this->runCommand('composer show --locked --outdated --direct')->getOutput()
+      );
+
+      $this->updateHelperOutput->printHeader2('Not Updated Securities (ALL):');
+      $this->output->writeln(
+        $this->runCommand('composer show --locked --outdated')->getOutput()
+      );
+
+    }
   }
 
   protected function isDrupalExtension(string $package) {
