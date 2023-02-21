@@ -3,7 +3,7 @@
     "description": "Helps to update drupal modules",
     "type": "library",
     "bin": [
-        "bin/console"
+        "drupal-update-helper"
     ],
     "require": {
         "symfony/console": "^4 || ^5",
