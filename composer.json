@@ -1,0 +1,25 @@
+{
+    "name": "metadrop/drupal-update-helper",
+    "description": "Helps to update drupal modules",
+    "type": "library",
+    "bin": [
+        "bin/console"
+    ],
+    "require": {
+        "symfony/console": "^4 || ^5",
+        "symfony/process": "^4 || ^5",
+        "drush/drush": "^11"
+    },
+    "authors": [
+        {
+            "name": "Omar",
+            "email": "omar.lopesino@metadrop.net"
+        }
+    ],
+    "minimum-stability": "dev",
+    "autoload": {
+        "psr-4": {
+            "DrupalUpdateHelper\\": "src/"
+        }
+    }
+}
