@@ -13,7 +13,7 @@ class UpdaterCommand extends Command {
 
   protected static $defaultName = 'update';
 
-  protected UpdaterOutput $updateHelperOutput;
+  protected UpdaterOutput $updaterOutput;
 
   protected OutputInterface $output;
 
@@ -45,7 +45,7 @@ Update includes:
 
   protected function initialize(InputInterface $input, OutputInterface $output)
   {
-    $this->updateHelperOutput = new UpdateHelperOutput($output);
+    $this->updaterOutput = new UpdaterOutput($output);
     $this->output = $output;
     $this->environments = explode(',', $input->getOption('environments'));
     $this->commitAuthor = $input->getOption('author');
@@ -55,12 +55,12 @@ Update includes:
 
   protected function execute(InputInterface $input, OutputInterface $output)
   {
-      $this->updateHelperOutput->printSummary();
-      $this->updateHelperOutput->printHeader1('1. Consolidating configuration');
+      $this->updaterOutput->printSummary();
+      $this->updaterOutput->printHeader1('1. Consolidating configuration');
       $this->consolidateConfiguration();
-      $this->updateHelperOutput->printHeader1('2. Checking outdated packages');
+      $this->updaterOutput->printHeader1('2. Checking outdated packages');
       $this->checkOutdatedPackages();
-      $this->updateHelperOutput->printHeader1('3. Updating packages');
+      $this->updaterOutput->printHeader1('3. Updating packages');
       $this->updatePackages($this->packagesToUpdate);
       return 0;
   }
@@ -146,7 +146,7 @@ Update includes:
   }
 
   protected function updatePackage(string $package) {
-    $this->updateHelperOutput->printHeader2(sprintf('Updating: %s', $package));
+    $this->updaterOutput->printHeader2(sprintf('Updating: %s', $package));
     $version_from = trim($this->runCommand(sprintf("composer show --locked %s | grep versions | awk '{print $4}'", $package))->getOutput());
     try {
       $this->runComposer('update', [$package, '--with-dependencies']);
@@ -196,12 +196,12 @@ Update includes:
     }
 
     if ($this->onlySecurity) {
-      $this->updateHelperOutput->printHeader2('Not Updated Securities (Packagist):');
+      $this->updaterOutput->printHeader2('Not Updated Securities (Packagist):');
       $this->output->writeln(
         $this->runCommand('composer audit --locked $update_no_dev --format plain 2>&1 | grep ^Package | cut -f2 -d: | sort -u')->getOutput(),
       );
 
-      $this->updateHelperOutput->printHeader2('Not Updated Securities (Drupal):');
+      $this->updaterOutput->printHeader2('Not Updated Securities (Drupal):');
       try {
         $this->output->writeln(
           $this->runCommand('./vendor/bin/drush pm:security --fields=name --format=list 2>/dev/null')->getOutput(),
@@ -213,12 +213,12 @@ Update includes:
 
     }
     else {
-      $this->updateHelperOutput->printHeader2('Not Updated Packages (Direct):');
+      $this->updaterOutput->printHeader2('Not Updated Packages (Direct):');
       $this->output->writeln(
         $this->runCommand('composer show --locked --outdated --direct')->getOutput()
       );
 
-      $this->updateHelperOutput->printHeader2('Not Updated Securities (ALL):');
+      $this->updaterOutput->printHeader2('Not Updated Securities (ALL):');
       $this->output->writeln(
         $this->runCommand('composer show --locked --outdated')->getOutput()
       );
