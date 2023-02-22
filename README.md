@@ -32,8 +32,8 @@ Basic update:
 
 Parameters allowed:
 
-- **--security**: If set to 1, it will update only securities.
-- **--no-dev**: If set to 1, won't update dev dependencies, only the primary ones.
+- **--security**: It will update only securities.
+- **--no-dev**: It won't update dev dependencies, only the primary ones.
 - **--author**: It sets the git commits author. Example: Test<test@example.com>
 
 Examples:
@@ -41,13 +41,13 @@ Examples:
 - Update securities:
 
 ```bash
-./vendor/bin/drupal-updater update --security=1
+./vendor/bin/drupal-updater --security
 ```
 
 - Update only primary packages:
 
 ```bash
-./vendor/bin/drupal-updater update --no-dev=1
+./vendor/bin/drupal-updater --no-dev
 ```
 
 - Update with a specific author:
