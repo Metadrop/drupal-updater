@@ -13,6 +13,14 @@ This package works with:
 - Drush >=10.
 - Composer 2.4 (global).
 
+## Installation
+
+Before doing the installation, make sure your environment has composer 2.4 or higher installed locally.
+
+```bash
+composer require metadrop/drupal-updater
+```
+
 ## How it works
 
 
