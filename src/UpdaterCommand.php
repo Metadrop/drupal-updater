@@ -82,7 +82,7 @@ Update includes:
     $this->environments = explode(',', $input->getOption('environments'));
     $this->commitAuthor = $input->getOption('author');
     $this->onlySecurity = (bool) $input->getOption('security');
-    $this->noDev = (bool) $input->hasOption('no-dev') == 1;
+    $this->noDev = (bool) $input->getOption('no-dev');
   }
 
   /**
