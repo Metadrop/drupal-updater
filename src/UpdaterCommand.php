@@ -79,10 +79,20 @@ Update includes:
    */
   protected function initialize(InputInterface $input, OutputInterface $output) {
     $this->output = $output;
+    $this->printHeader1('SETUP');
+    $this->output->writeln(sprintf('Environments: %s', $input->getOption('environments')));
     $this->environments = explode(',', $input->getOption('environments'));
     $this->commitAuthor = $input->getOption('author');
+    $this->output->writeln(sprintf('GIT author will be overriden with: %s', $this->commitAuthor));
     $this->onlySecurity = (bool) $input->getOption('security');
+    if ($this->onlySecurity) {
+      $this->output->writeln('Only security updates will be done');
+    }
     $this->noDev = (bool) $input->getOption('no-dev');
+    if ($this->noDev) {
+      $this->output->writeln("Dev packages won't be updated");
+    }
+    $this->output->writeln('');
   }
 
   /**
