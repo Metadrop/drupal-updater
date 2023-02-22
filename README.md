@@ -8,7 +8,10 @@ It also allows update only securities.
 
 ## Requirements
 
-This package works with drush >=10 and composer >=2.4.
+This package works with:
+
+- Drush >=10.
+- Composer 2.4 (global).
 
 ## How it works
 
