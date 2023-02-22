@@ -70,8 +70,8 @@ Update includes:
   - For each package try to update and commit it (recovers previous state if fails)');
     $this->addOption('environments', 'envs', InputOption::VALUE_REQUIRED,'List of drush aliases that are needed to update', '@self');
     $this->addOption('author', 'a', InputOption::VALUE_REQUIRED, 'Git author', 'Drupal <drupal@update-helper>');
-    $this->addOption('security', 's', InputOption::VALUE_OPTIONAL, 'Only update security packages', 0);
-    $this->addOption('no-dev', 'nd', InputOption::VALUE_OPTIONAL, 'Only update main requirements', 0);
+    $this->addOption('security', 's', InputOption::VALUE_NONE, 'Only update security packages');
+    $this->addOption('no-dev', 'nd', InputOption::VALUE_NONE, 'Only update main requirements');
   }
 
   /**
