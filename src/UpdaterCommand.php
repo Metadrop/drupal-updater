@@ -233,12 +233,12 @@ Update includes:
     }
 
     $this->packagesToUpdate = explode("\n", $packages_to_update);
-    $this->packagesToUpdate = array_filter($this->packagesToUpdate, function ($package) {
-      return preg_match('/^([A-Za-z0-9_-]*\/[A-Za-z0-9_-]*)/', $package);
-    });
     $this->packagesToUpdate = array_map(function ($package) {
       return trim($package);
     }, $this->packagesToUpdate);
+    $this->packagesToUpdate = array_filter($this->packagesToUpdate, function ($package) {
+      return preg_match('/^([A-Za-z0-9_-]*\/[A-Za-z0-9_-]*)/', $package);
+    });
 
     $this->output->writeln(implode("\n", $this->packagesToUpdate));
   }
