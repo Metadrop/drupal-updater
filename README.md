@@ -56,5 +56,5 @@ Examples:
 - Update with a specific author:
 
 ```bash
-./vendor/bin/drupal-updater update --author=Test<test@example.com>
+./vendor/bin/drupal-updater --author=Test<test@example.com>
 ```
