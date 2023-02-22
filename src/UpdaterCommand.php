@@ -9,26 +9,59 @@ use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Process\Exception\ProcessFailedException;
 use Symfony\Component\Process\Process;
 
+/**
+ * Updates drupal modules and packages.
+ */
 class UpdaterCommand extends Command {
 
   protected static $defaultName = 'update';
 
-  protected UpdaterOutput $updaterOutput;
-
+  /**
+   * Prints the output of the command.
+   *
+   * @var \Symfony\Component\Console\Output\OutputInterface
+   */
   protected OutputInterface $output;
 
+  /**
+   * If true, only security updates will be updated.
+   *
+   * @var bool
+   */
   protected bool $onlySecurity;
 
+  /**
+   * If true, development packages won't be updated.
+   *
+   * @var bool
+   */
   protected bool $noDev;
 
+  /**
+   * List of environments to update.
+   *
+   * @var array
+   */
   protected array $environments;
 
+  /**
+   * Author of the commits.
+   *
+   * @var string
+   */
   protected string $commitAuthor;
 
+  /**
+   * List of packages that will be updated.
+   *
+   * @var array
+   */
   protected array $packagesToUpdate;
 
-  protected function configure()
-  {
+  /**
+   * {@inheritdoc}
+   */
+  protected function configure() {
     $this->setHelp('Update composer packages.
 
 Update includes:
@@ -41,9 +74,10 @@ Update includes:
     $this->addOption('no-dev', 'nd', InputOption::VALUE_OPTIONAL, 'Only update main requirements', 0);
   }
 
-  protected function initialize(InputInterface $input, OutputInterface $output)
-  {
-    $this->updaterOutput = new UpdaterOutput($output);
+  /**
+   * {@inheritdoc}
+   */
+  protected function initialize(InputInterface $input, OutputInterface $output) {
     $this->output = $output;
     $this->environments = explode(',', $input->getOption('environments'));
     $this->commitAuthor = $input->getOption('author');
@@ -51,24 +85,35 @@ Update includes:
     $this->noDev = (bool) $input->hasOption('no-dev') == 1;
   }
 
-  protected function execute(InputInterface $input, OutputInterface $output)
-  {
-      $this->runCommand('cp composer.lock composer.drupalupdater.lock');
-      $this->updaterOutput->printSummary();
-      $this->updaterOutput->printHeader1('1. Consolidating configuration');
-      $this->consolidateConfiguration();
-      $this->updaterOutput->printHeader1('2. Checking outdated packages');
-      $this->checkOutdatedPackages();
-      $this->output->writeln('');
-      $this->updaterOutput->printHeader1('3. Updating packages');
-      $this->updatePackages($this->packagesToUpdate);
-      $this->output->writeln('');
-      $this->updaterOutput->printHeader1('4. Report');
-      $this->report();
-      return 0;
+  /**
+   * {@inheritdoc}
+   */
+  protected function execute(InputInterface $input, OutputInterface $output) {
+    $this->runCommand('cp composer.lock composer.drupalupdater.lock');
+    $this->printSummary();
+    $this->printHeader1('1. Consolidating configuration');
+    $this->consolidateConfiguration();
+    $this->printHeader1('2. Checking outdated packages');
+    $this->checkOutdatedPackages();
+    $this->output->writeln('');
+    $this->printHeader1('3. Updating packages');
+    $this->updatePackages($this->packagesToUpdate);
+    $this->output->writeln('');
+    $this->printHeader1('4. Report');
+    $this->report();
+    return 0;
   }
 
-  protected function runDrushComand(string $command, array $environments = []) {
+  /**
+   * Run a drush command.
+   *
+   * @param string $command
+   *   Command to execute.
+   * @param array $environments
+   *   Environments where the command needs to be executed.
+   *   If empty, it will be executed in the environments passed to the command.
+   */
+  protected function runDrushCommand(string $command, array $environments = []) {
     if (empty($environments)) {
       $environments = $this->environments;
     }
@@ -77,9 +122,20 @@ Update includes:
       $this->output->writeln(sprintf("Running drush %s on the \"%s\" environment:\n", $command, $environment));
       $this->runCommand(sprintf('drush %s %s', $environment, $command));
     }
-
   }
 
+  /**
+   * Runs a shell command.
+   *
+   * @param string $command
+   *   Command.
+   *
+   * @return Process
+   *   It can be used to obtain the command output if needed.
+   *
+   * @throws ProcessFailedException
+   *   When the command fails.
+   */
   protected function runCommand(string $command) {
     $process = Process::fromShellCommandline($command);
     $process->run();
@@ -89,21 +145,59 @@ Update includes:
     return $process;
   }
 
+  /**
+   * Run a composer command.
+   *
+   * @param string $command
+   *   Composer command.
+   * @param array $parameters
+   *   List of parameters the command needs.
+   *
+   * @return Process
+   *   Process result.
+   */
   protected function runComposer(string $command, array $parameters) {
     return $this->runCommand(sprintf('composer %s %s', $command, implode(' ', $parameters)));
   }
 
+  /**
+   * Get the no dev parameter.
+   *
+   * No dev parameter is only added if the --no-dev
+   * argument is passed to the command.
+   *
+   * @return string
+   */
   protected function getNoDevParameter(){
     return $this->noDev ? '--no-dev' : '';
   }
 
+  /**
+   * Prints a summary listing what will be done in the script.
+   */
+  protected function printSummary() {
+    $this->printHeader1('Summary');
+    $this->output->writeln('1. Consolidating configuration');
+    $this->output->writeln('2. Checking packages');
+    $this->output->writeln('3. Updating packages');
+    $this->output->writeln('4. Report');
+    $this->output->writeln('');
+  }
+
+  /**
+   * Consolidate configuration for all the environments.
+   *
+   * All the configuration that is changed is commited,
+   * doing one commit per environment. This implies that
+   * configuration must be consistent before running the command.
+   */
   protected function consolidateConfiguration() {
-    $this->runDrushComand('cr');
-    $this->runDrushComand('cim -y');
+    $this->runDrushCommand('cr');
+    $this->runDrushCommand('cim -y');
 
     foreach ($this->environments as $environment) {
       $this->output->writeln(sprintf('Consolidating %s environment', $environment));
-      $this->runDrushComand('cex -y');
+      $this->runDrushCommand('cex -y', [$environment]);
       $this->runCommand(sprintf(
         'git add config && git commit -m "CONFIG - Consolidate current configuration on %s" --author="%s" -n || echo "No changes to commit"',
         $environment,
@@ -111,10 +205,17 @@ Update includes:
       ));
     }
 
-    $this->runDrushComand('cr');
-    $this->runDrushComand('cim -y');
+    $this->runDrushCommand('cr');
+    $this->runDrushCommand('cim -y');
   }
 
+  /**
+   * Check the packages that needs update.
+   *
+   * By default, all direct packages will be updated.
+   * If security parameter is set, only security packages
+   * will be updated.
+   */
   protected function checkOutdatedPackages() {
     if ($this->onlySecurity) {
       $packages_to_update = $this->runCommand(sprintf('composer audit --locked %s --format plain 2>&1 | grep ^Package | cut -f2 -d: | sort -u', $this->getNoDevParameter()))->getOutput();
@@ -142,14 +243,31 @@ Update includes:
     $this->output->writeln(implode("\n", $this->packagesToUpdate));
   }
 
+  /**
+   * Updates the packages.
+   *
+   * @param array $package_list
+   *   List of packages to update.
+   */
   protected function updatePackages(array $package_list) {
     foreach ($package_list as $package) {
       $this->updatePackage($package);
     }
   }
 
+  /**
+   * Updates a specific package.
+   *
+   * After the command, all the modified files will be commited.
+   *
+   * When the package is a drupal module, the updates will be applied
+   * and the configuration will be exported and commited.
+   *
+   * @param string $package
+   *   PAckage to update.
+   */
   protected function updatePackage(string $package) {
-    $this->updaterOutput->printHeader2(sprintf('Updating: %s', $package));
+    $this->printHeader2(sprintf('Updating: %s', $package));
     $version_from = trim($this->runCommand(sprintf("composer show --locked %s | grep versions | awk '{print $4}'", $package))->getOutput());
     try {
       $this->runComposer('update', [$package, '--with-dependencies']);
@@ -175,9 +293,9 @@ Update includes:
 
     if ($this->isDrupalExtension($package)) {
       $this->runCommand('git add web');
-      $this->runDrushComand('cr');
-      $this->runDrushComand('updb -y');
-      $this->runDrushComand('cex -y');
+      $this->runDrushCommand('cr');
+      $this->runDrushCommand('updb -y');
+      $this->runDrushCommand('cex -y');
       $this->runCommand('git add config');
     }
 
@@ -189,8 +307,15 @@ Update includes:
 
   }
 
+  /**
+   * Shows a report.
+   *
+   * The report contains:
+   *   - All the updated packages.
+   *   - All the new packages (sub-dependencies).
+   *   - Pending updates.
+   */
   protected function report() {
-
     $this->output->writeln(
       $this->runCommand('composer-lock-diff  --from composer.lock --to  composer.drupalupdater.lock')->getOutput(),
     );
@@ -198,12 +323,12 @@ Update includes:
     $this->runCommand('rm composer.drupalupdater.lock');
 
     if ($this->onlySecurity) {
-      $this->updaterOutput->printHeader2('Not Updated Securities (Packagist):');
+      $this->printHeader2('Not Updated Securities (Packagist):');
       $this->output->writeln(
         $this->runCommand('composer audit --locked $update_no_dev --format plain 2>&1 | grep ^Package | cut -f2 -d: | sort -u')->getOutput(),
       );
 
-      $this->updaterOutput->printHeader2('Not Updated Securities (Drupal):');
+      $this->printHeader2('Not Updated Securities (Drupal):');
       try {
         $this->output->writeln(
           $this->runCommand('./vendor/bin/drush pm:security --fields=name --format=list 2>/dev/null')->getOutput(),
@@ -215,26 +340,66 @@ Update includes:
 
     }
     else {
-      $this->updaterOutput->printHeader2('Not Updated Packages (Direct):');
+      $this->printHeader2('Not Updated Packages (Direct):');
       $this->output->writeln(
         $this->runCommand('composer show --locked --outdated --direct')->getOutput()
       );
 
-      $this->updaterOutput->printHeader2('Not Updated Securities (ALL):');
+      $this->printHeader2('Not Updated Securities (ALL):');
       $this->output->writeln(
         $this->runCommand('composer show --locked --outdated')->getOutput()
       );
-
     }
   }
 
+  /**
+   * Checks that the package is a drupal extension.
+   *
+   * By drupal extension we mean:
+   *   - Module
+   *   - Theme
+   *   - Library
+   *   - Drush command package.
+   *
+   * @param string $package
+   *   Package.
+   *
+   * @return bool
+   *   TRUE when the package is a drupal extension.
+   */
   protected function isDrupalExtension(string $package) {
     $package_type = $this->runCommand(sprintf("composer show %s | grep ^type | awk '{print $3}'", $package))->getOutput();
     return $package_type != 'drupal-library' && str_starts_with($package_type, 'drupal');
   }
 
+  /**
+   * Get the list of packages to update.
+   *
+   * @return array
+   *   List of packages to update.
+   */
   protected function getPackagesToUpdate() {
     return $this->packagesToUpdate;
+  }
+
+  /**
+   * Print a primary header.
+   *
+   * @param string $text
+   *   Header text.
+   */
+  protected function printHeader1(string $text) {
+    $this->output->writeln(sprintf("// %s //\n", strtoupper($text)));
+  }
+
+  /**
+   * Prints a secondary header.
+   *
+   * @param string $text
+   *   Header text.
+   */
+  protected function printHeader2(string $text) {
+    $this->output->writeln(sprintf("/// %s ///\n", $text));
   }
 
 }
