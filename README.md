@@ -45,7 +45,7 @@ Parameters allowed:
 
 - **--security**: It will update only securities.
 - **--no-dev**: It won't update dev dependencies, only the primary ones.
-- **--author**: It sets the git commits author. Example: Test<test@example.com>
+- **--author**: It sets the git commits author. Example: `Test<test@example.com>`
 
 Examples:
 
