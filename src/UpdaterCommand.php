@@ -302,6 +302,7 @@ Update includes:
     $this->output->writeln(
       $this->runCommand('composer-lock-diff')->getOutput(),
     );
+    $this->output->writeln('');
 
     $this->runCommand('git add composer.json composer.lock');
 
