@@ -358,8 +358,13 @@ Update includes:
 
       $this->printHeader2('Not Updated Securities (ALL):');
       $this->output->writeln(
-        $this->runCommand('composer show --locked --outdated')->getOutput()
+        $this->runCommand('composer audit --locked')->getOutput()
       );
+
+      $this->output->writeln(
+        $this->runCommand('./vendor/bin/drush pm:security --fields=name --format=list 2>/dev/null')->getOutput(),
+      );
+
     }
   }
 
