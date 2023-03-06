@@ -148,6 +148,7 @@ Update includes:
    */
   protected function runCommand(string $command) {
     $process = Process::fromShellCommandline($command);
+    $process->setTimeout(300);
     $process->run();
     if (!$process->isSuccessful()) {
       throw new ProcessFailedException($process);
