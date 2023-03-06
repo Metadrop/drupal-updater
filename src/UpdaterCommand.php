@@ -282,7 +282,7 @@ Update includes:
     try {
       $this->runComposer('update', [$package, '--with-dependencies']);
     }
-    catch (ProcessFailedException $e) {
+    catch (\Exception $e) {
       $this->output->writeln("\n!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
       $this->output->writeln($e->getProcess()->getErrorOutput());
       $this->output->writeln('Updating package FAILED: recovering previous state.');
