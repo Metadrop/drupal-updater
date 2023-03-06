@@ -279,7 +279,6 @@ Update includes:
    */
   protected function updatePackage(string $package) {
     $this->printHeader2(sprintf('Updating: %s', $package));
-    $version_from = trim($this->runCommand(sprintf("composer show --locked %s | grep versions | awk '{print $4}'", $package))->getOutput());
     try {
       $this->runComposer('update', [$package, '--with-dependencies']);
     }
@@ -299,7 +298,11 @@ Update includes:
       return;
     }
 
-    $version_to = trim($this->runCommand(sprintf("composer show --locked %s | grep versions | awk '{print $4}'", $package))->getOutput());
+    $this->output->writeln("\nUpdated packages:");
+    $this->output->writeln(
+      $this->runCommand('composer-lock-diff')->getOutput(),
+    );
+
     $this->runCommand('git add composer.json composer.lock');
 
     if ($this->isDrupalExtension($package)) {
@@ -311,10 +314,6 @@ Update includes:
     }
 
     $this->runCommand(sprintf('git commit -m "UPDATE - %s" --author="%s" -n', $package, $this->commitAuthor));
-
-    if ($version_from != $version_to) {
-      $this->output->writeln(sprintf('Package %s has been updated from %s to %s', $package, $version_from, $version_to));
-    }
 
   }
 
