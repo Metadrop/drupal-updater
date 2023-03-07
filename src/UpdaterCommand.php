@@ -347,12 +347,6 @@ Update includes:
       return;
     }
 
-    $this->output->writeln("\nUpdated packages:");
-    $this->output->writeln(
-      $this->runCommand('composer-lock-diff')->getOutput(),
-    );
-    $this->output->writeln('');
-
     $this->runCommand('git add composer.json composer.lock');
 
     if ($this->isDrupalExtension($package)) {
@@ -362,6 +356,11 @@ Update includes:
       $this->runDrushCommand('cex -y');
       $this->runCommand('git add config');
     }
+
+    $this->output->writeln("\nUpdated packages:");
+    $this->output->writeln(
+      $this->runCommand('composer-lock-diff')->getOutput(),
+    );
 
     $this->runCommand(sprintf('git commit -m "UPDATE - %s" --author="%s" -n', $package, $this->commitAuthor));
 
