@@ -396,7 +396,7 @@ Update includes:
    */
   protected function report() {
     $this->output->writeln(
-      $this->runCommand('composer-lock-diff  --from composer.lock --to  composer.drupalupdater.lock')->getOutput(),
+      $this->runCommand('composer-lock-diff  --from composer.drupalupdater.lock --to composer.lock')->getOutput(),
     );
 
     $this->runCommand('rm composer.drupalupdater.lock');
