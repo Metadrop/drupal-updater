@@ -59,6 +59,13 @@ class UpdaterCommand extends Command {
   protected array $packagesToUpdate;
 
   /**
+   * Full list of outdated packages.
+   *
+   * @var array
+   */
+  protected array $outdatedPackages = [];
+
+  /**
    * {@inheritdoc}
    */
   protected function configure() {
@@ -267,6 +274,40 @@ Update includes:
   }
 
   /**
+   * Gets the list of outdated packages.
+   *
+   * It calculates the outdated packages only the first time.
+   *
+   * @return array
+   *   List of all outdated packages.
+   */
+  protected function getAllOutdatedPackages() {
+    if (empty($this->outdatedPackages)) {
+      $this->outdatedPackages = json_decode($this->runCommand('composer show --locked --outdated --format json')->getOutput())->locked;
+    }
+    return $this->outdatedPackages;
+  }
+
+  /**
+   * Get an available update of a specific module.
+   *
+   * @param string $package_name
+   *   Package name.
+   *
+   * @return object|null
+   *   Available update information for the specific package.
+   */
+  protected function getAvailableUpdate(string $package_name) {
+    $outdated_packages = $this->getAllOutdatedPackages();
+    foreach ($outdated_packages as $package) {
+      if ($package->name == $package_name && $package->version != $package->latest) {
+        return $package;
+      }
+    }
+    return NULL;
+  }
+
+  /**
    * Updates a specific package.
    *
    * After the command, all the modified files will be commited.
@@ -293,8 +334,16 @@ Update includes:
 
     $composer_lock_is_changed = (int) $this->runCommand('git status --porcelain composer.lock | wc -l')->getOutput() > 0;
 
+    $available_update = $this->getAvailableUpdate($package);
+    if (!empty($available_update) && !empty($available_update->latest)) {
+      $this->output->writeln(sprintf("Package %s has an update available to %s version. Due to composer.json constraints, it hasn't been updated.", $package, $available_update->latest));
+    }
+
     if (!$composer_lock_is_changed) {
-      $this->output->writeln(sprintf('Package %s has not been updated', $package));
+      if (empty($available_update)) {
+        $this->output->writeln(sprintf("There aren't available updates for %s package.", $package));
+      }
+      $this->output->writeln('');
       return;
     }
 
