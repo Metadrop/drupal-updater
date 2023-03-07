@@ -324,11 +324,7 @@ Update includes:
       $this->runComposer('update', [$package, '--with-dependencies']);
     }
     catch (\Exception $e) {
-      $this->output->writeln("\n!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
-      $this->output->writeln($e->getProcess()->getErrorOutput());
-      $this->output->writeln('Updating package FAILED: recovering previous state.');
-      $this->output->writeln('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!');
-      $this->runCommand('git checkout composer.json composer.lock');
+      $this->handlePackageUpdateErrors($e);
       return;
     }
 
@@ -350,11 +346,18 @@ Update includes:
     $this->runCommand('git add composer.json composer.lock');
 
     if ($this->isDrupalExtension($package)) {
-      $this->runCommand('git add web');
-      $this->runDrushCommand('cr');
-      $this->runDrushCommand('updb -y');
-      $this->runDrushCommand('cex -y');
-      $this->runCommand('git add config');
+      try {
+        $this->runCommand('git add web');
+        $this->runDrushCommand('cr');
+        $this->runDrushCommand('updb -y');
+        $this->runDrushCommand('cex -y');
+        $this->runCommand('git add config');
+      }
+      catch (\Exception $e) {
+        $this->handlePackageUpdateErrors($e);
+        return;
+      }
+
     }
 
     $this->output->writeln("\nUpdated packages:");
@@ -364,6 +367,23 @@ Update includes:
 
     $this->runCommand(sprintf('git commit -m "UPDATE - %s" --author="%s" -n', $package, $this->commitAuthor));
 
+  }
+
+  /**
+   * Handle errors produced in a update.
+   *
+   * There are errors either in composer update or drush updb, in those
+   * case all the possible changes are reverted and the error message is shown.
+   *
+   * @param \Exception $e
+   *   Exception.
+   */
+  protected function handlePackageUpdateErrors(\Exception $e) {
+    $this->output->writeln("\n!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
+    $this->output->writeln($e->getProcess()->getErrorOutput());
+    $this->output->writeln('Updating package FAILED: recovering previous state.');
+    $this->output->writeln('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!');
+    $this->runCommand('git checkout composer.json composer.lock');
   }
 
   /**
