@@ -332,14 +332,13 @@ Update includes:
 
     $available_update = $this->getAvailableUpdate($package);
     if (!empty($available_update) && !empty($available_update->latest)) {
-      $this->output->writeln(sprintf("Package %s has an update available to %s version. Due to composer.json constraints, it hasn't been updated.", $package, $available_update->latest));
+      $this->output->writeln(sprintf("Package %s has an update available to %s version. Due to composer.json constraints, it hasn't been updated.\n", $package, $available_update->latest));
     }
 
     if (!$composer_lock_is_changed) {
       if (empty($available_update)) {
-        $this->output->writeln(sprintf("There aren't available updates for %s package.", $package));
+        $this->output->writeln(sprintf("There aren't available updates for %s package.\n", $package));
       }
-      $this->output->writeln('');
       return;
     }
 
