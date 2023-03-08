@@ -29,7 +29,7 @@ This module will try to update your dependencies based on how they are required 
 - Before starting to update, all the Drupal configuration is consolidated and commited into GIT.
 - For each module / package updated the changes are commited:
   - For PHP packages, it commits the composer.lock
-  - For Drupal extensions, it applies the updates, commits the configuration changed and the modified files. On multisites environments it will export/commit the configuration for all environments keeping them all synchronized (see paramaters).
+  - For Drupal extensions, it applies the updates, commits the configuration changed and the modified files. On multisites environments it will export/commit the configuration for all environments keeping them all synchronized (see parameters).
 
 If a package has an available update and that update can't be done by running `composer update`, it won't do the upgrade. This means that not all packages will be upgraded, but most of them yes.
 
