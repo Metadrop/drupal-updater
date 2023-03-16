@@ -237,11 +237,14 @@ Update includes:
   protected function checkOutdatedPackages() {
     if ($this->onlySecurity) {
       $packages_to_update = $this->runCommand(sprintf('composer audit --locked %s --format plain 2>&1 | grep ^Package | cut -f2 -d: | sort -u', $this->getNoDevParameter()))->getOutput();
+
       try {
         $drupal_security_packages = $this->runCommand('./vendor/bin/drush pm:security --fields=name --format=list 2>/dev/null')
           ->getOutput();
       }
-      catch (ProcessFailedException $e) {}
+      catch (ProcessFailedException $e) {
+        $drupal_security_packages = $e->getProcess()->getOutput();
+      }
 
       $packages_to_update = sprintf("%s\n%s", $packages_to_update, $drupal_security_packages);
     }
