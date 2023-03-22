@@ -363,11 +363,10 @@ Update includes:
     }
 
     $this->output->writeln("\nUpdated packages:");
-    $this->output->writeln(
-      $this->runCommand('composer-lock-diff')->getOutput(),
-    );
+    $updated_packages = trim($this->runCommand('composer-lock-diff')->getOutput());
+    $this->output->writeln($updated_packages);
 
-    $this->runCommand(sprintf('git commit -m "UPDATE - %s" --author="%s" -n', $package, $this->commitAuthor));
+    $this->runCommand(sprintf('git commit -m "UPDATE - %s with dependencies" -m "%s" --author="%s" -n', $package, $updated_packages, $this->commitAuthor));
 
   }
 
