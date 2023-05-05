@@ -110,8 +110,8 @@ Update includes:
     $this->printSummary();
     $this->printHeader1('1. Consolidating configuration');
     $this->consolidateConfiguration();
-    $this->printHeader1('2. Checking outdated packages');
-    $this->checkOutdatedPackages();
+    $this->printHeader1('2. Checking packages');
+    $this->checkPackages();
     $this->output->writeln('');
     $this->printHeader1('3. Updating packages');
     $this->updatePackages($this->packagesToUpdate);
@@ -242,7 +242,7 @@ Update includes:
    * If security parameter is set, only security packages
    * will be updated.
    */
-  protected function checkOutdatedPackages() {
+  protected function checkPackages() {
     if ($this->onlySecurity) {
       $packages_to_update = $this->runCommand(sprintf('composer audit --locked %s --format plain 2>&1 | grep ^Package | cut -f2 -d: | sort -u', $this->getNoDevParameter()))->getOutput();
 
