@@ -332,7 +332,7 @@ Update includes:
   protected function updatePackage(string $package) {
     $this->printHeader2(sprintf('Updating: %s', $package));
     try {
-      $this->runComposer('update', [$package, '--with-dependencies']);
+      $result = $this->runComposer('update', [$package, '--with-dependencies']);
     }
     catch (\Exception $e) {
       $this->handlePackageUpdateErrors($e);
@@ -344,6 +344,18 @@ Update includes:
     $available_update = $this->getAvailableUpdate($package);
     if (!empty($available_update) && !empty($available_update->latest) && !$composer_lock_is_changed) {
       $this->output->writeln(sprintf("Package %s has an update available to %s version. Due to composer.json constraints, it hasn't been updated.\n", $package, $available_update->latest));
+
+      $error_output = trim($result->getOutput());
+      $valid_errors = [
+        'but it conflicts with your root composer.json require',
+      ];
+
+      foreach ($valid_errors as $error) {
+        if (str_contains($error_output, $error)) {
+          $this->output->writeln("\n$error_output");
+        }
+      }
+
     }
 
     if (!$composer_lock_is_changed) {
