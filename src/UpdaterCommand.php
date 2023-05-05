@@ -348,6 +348,7 @@ Update includes:
       $error_output = trim($result->getOutput());
       $valid_errors = [
         'but it conflicts with your root composer.json require',
+        'Your requirements could not be resolved to an installable set of packages.',
       ];
 
       foreach ($valid_errors as $error) {
