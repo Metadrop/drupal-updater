@@ -334,7 +334,7 @@ Update includes:
     $composer_lock_is_changed = (int) $this->runCommand('git status --porcelain composer.lock | wc -l')->getOutput() > 0;
 
     $available_update = $this->getAvailableUpdate($package);
-    if (!empty($available_update) && !empty($available_update->latest)) {
+    if (!empty($available_update) && !empty($available_update->latest) && !$composer_lock_is_changed) {
       $this->output->writeln(sprintf("Package %s has an update available to %s version. Due to composer.json constraints, it hasn't been updated.\n", $package, $available_update->latest));
     }
 
