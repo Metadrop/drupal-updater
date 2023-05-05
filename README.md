@@ -62,6 +62,12 @@ Examples:
   ./vendor/bin/drupal-updater --no-dev
   ```
 
+- Update specific packages:
+
+  ```bash
+  ./vendor/bin/drupal-updater --packages=drupal/core-recommended,drupal/core-dev
+  ```
+
 - Update with a specific author:
 
   ```bash
