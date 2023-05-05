@@ -216,6 +216,14 @@ Update includes:
     foreach ($this->environments as $environment) {
       $this->output->writeln(sprintf('Consolidating %s environment', $environment));
       $this->runDrushCommand('cex -y', [$environment]);
+
+      $changes = trim($this->runCommand('git status config -s')->getOutput());
+      if (!empty($changes)) {
+        $this->output->writeln("\nChanges done:\n");
+        $git_status_output = trim($this->runCommand('git status config')->getOutput());
+        $this->output->writeln("$git_status_output\n");
+      }
+
       $this->runCommand(sprintf(
         'git add config && git commit -m "CONFIG - Consolidate current configuration on %s" --author="%s" -n || echo "No changes to commit"',
         $environment,
