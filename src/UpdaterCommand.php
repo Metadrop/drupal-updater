@@ -81,7 +81,7 @@ Update includes:
     $this->addOption('author', 'a', InputOption::VALUE_REQUIRED, 'Git author', 'Drupal <drupal@update-helper>');
     $this->addOption('security', 's', InputOption::VALUE_NONE, 'Only update security packages');
     $this->addOption('no-dev', 'nd', InputOption::VALUE_NONE, 'Only update main requirements');
-    $this->addOption('package-list', 'pl', InputOption::VALUE_OPTIONAL, 'Comma separated list of packages to update');
+    $this->addOption('packages', 'pl', InputOption::VALUE_OPTIONAL, 'Comma separated list of packages to update');
   }
 
   /**
@@ -104,7 +104,7 @@ Update includes:
     }
     $this->output->writeln('');
 
-    $packages_to_update = $input->getOption('package-list') ?? '';
+    $packages_to_update = $input->getOption('packages') ?? '';
     if (!empty($packages_to_update)) {
       $this->packagesToUpdate = explode(',', filter_var($packages_to_update, FILTER_SANITIZE_ADD_SLASHES));
       $this->showFullReport = FALSE;
