@@ -65,6 +65,8 @@ class UpdaterCommand extends Command {
    */
   protected array $outdatedPackages = [];
 
+  protected bool $showFullReport;
+
   /**
    * {@inheritdoc}
    */
@@ -79,6 +81,7 @@ Update includes:
     $this->addOption('author', 'a', InputOption::VALUE_REQUIRED, 'Git author', 'Drupal <drupal@update-helper>');
     $this->addOption('security', 's', InputOption::VALUE_NONE, 'Only update security packages');
     $this->addOption('no-dev', 'nd', InputOption::VALUE_NONE, 'Only update main requirements');
+    $this->addOption('package-list', 'pl', InputOption::VALUE_OPTIONAL, 'Comma separated list of packages to update');
   }
 
   /**
@@ -100,6 +103,10 @@ Update includes:
       $this->output->writeln("Dev packages won't be updated");
     }
     $this->output->writeln('');
+
+    $packages_to_update = $input->getOption('package-list') ?? '';
+    $this->packagesToUpdate = explode(',', filter_var($packages_to_update, FILTER_SANITIZE_ADD_SLASHES));
+    $this->showFullReport = empty($packages_to_update);
   }
 
   /**
@@ -111,7 +118,13 @@ Update includes:
     $this->printHeader1('1. Consolidating configuration');
     $this->consolidateConfiguration();
     $this->printHeader1('2. Checking packages');
-    $this->checkPackages();
+    if (empty($this->packagesToUpdate)) {
+      $this->checkPackages();
+    }
+    else {
+      $this->output->writeln(sprintf('Packages to update:'));
+      $this->output->writeln(implode("\n", $this->packagesToUpdate));
+    }
     $this->output->writeln('');
     $this->printHeader1('3. Updating packages');
     $this->updatePackages($this->packagesToUpdate);
@@ -119,7 +132,9 @@ Update includes:
     $this->printHeader1('4. Report');
     $this->showUpdatedPackages();
 
-    $this->showPendingUpdates();
+    if ($this->showFullReport) {
+      $this->showPendingUpdates();
+    }
 
     $this->cleanup();
 
@@ -464,9 +479,15 @@ Update includes:
    * Show updated packages.
    */
   protected function showUpdatedPackages() {
-    $this->output->writeln(
-      $this->runCommand('composer-lock-diff  --from composer.drupalupdater.lock --to composer.lock')->getOutput(),
-    );
+    $updated_packages = $this->runCommand('composer-lock-diff  --from composer.drupalupdater.lock --to composer.lock')->getOutput();
+    if (!empty($updated_packages)) {
+      $this->output->writeln(
+        $updated_packages,
+      );
+    }
+    else {
+      $this->output->writeln("No packages have been updated\n");
+    }
   }
 
   /**
