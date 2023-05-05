@@ -65,7 +65,7 @@ class UpdaterCommand extends Command {
    */
   protected array $outdatedPackages = [];
 
-  protected bool $showFullReport;
+  protected bool $showFullReport = TRUE;
 
   /**
    * {@inheritdoc}
@@ -105,8 +105,10 @@ Update includes:
     $this->output->writeln('');
 
     $packages_to_update = $input->getOption('package-list') ?? '';
-    $this->packagesToUpdate = explode(',', filter_var($packages_to_update, FILTER_SANITIZE_ADD_SLASHES));
-    $this->showFullReport = empty($packages_to_update);
+    if (!empty($packages_to_update)) {
+      $this->packagesToUpdate = explode(',', filter_var($packages_to_update, FILTER_SANITIZE_ADD_SLASHES));
+      $this->showFullReport = FALSE;
+    }
   }
 
   /**
@@ -118,7 +120,7 @@ Update includes:
     $this->printHeader1('1. Consolidating configuration');
     $this->consolidateConfiguration();
     $this->printHeader1('2. Checking packages');
-    if (empty($this->packagesToUpdate)) {
+    if (!isset($this->packagesToUpdate) || empty($this->packagesToUpdate)) {
       $this->checkPackages();
     }
     else {
