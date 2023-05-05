@@ -117,7 +117,12 @@ Update includes:
     $this->updatePackages($this->packagesToUpdate);
     $this->output->writeln('');
     $this->printHeader1('4. Report');
-    $this->report();
+    $this->showUpdatedPackages();
+
+    $this->showPendingUpdates();
+
+    $this->cleanup();
+
     return 0;
   }
 
@@ -409,24 +414,14 @@ Update includes:
   }
 
   /**
-   * Shows a report.
-   *
-   * The report contains:
-   *   - All the updated packages.
-   *   - All the new packages (sub-dependencies).
-   *   - Pending updates.
+   * Shows all the pending updates
    */
-  protected function report() {
-    $this->output->writeln(
-      $this->runCommand('composer-lock-diff  --from composer.drupalupdater.lock --to composer.lock')->getOutput(),
-    );
-
-    $this->runCommand('rm composer.drupalupdater.lock');
+  protected function showPendingUpdates() {
 
     if ($this->onlySecurity) {
       $this->printHeader2('Not Updated Securities (Packagist):');
       $this->output->writeln(
-        $this->runCommand('composer audit --locked $update_no_dev --format plain 2>&1 | grep ^Package | cut -f2 -d: | sort -u')->getOutput(),
+        $this->runCommand('composer audit --locked --format plain 2>&1 | grep ^Package | cut -f2 -d: | sort -u')->getOutput(),
       );
 
       $this->printHeader2('Not Updated Securities (Drupal):');
@@ -446,6 +441,13 @@ Update includes:
         $this->runCommand('composer show --locked --outdated --direct')->getOutput()
       );
 
+      $this->output->writeln('');
+      $this->printHeader2('Not Updated Packages (ALL):');
+      $this->output->writeln(
+        $this->runCommand('composer show --locked --outdated')->getOutput()
+      );
+
+      $this->output->writeln('');
       $this->printHeader2('Not Updated Securities (ALL):');
       $this->output->writeln(
         $this->runCommand('composer audit --locked')->getOutput()
@@ -456,6 +458,22 @@ Update includes:
       );
 
     }
+  }
+
+  /**
+   * Show updated packages.
+   */
+  protected function showUpdatedPackages() {
+    $this->output->writeln(
+      $this->runCommand('composer-lock-diff  --from composer.drupalupdater.lock --to composer.lock')->getOutput(),
+    );
+  }
+
+  /**
+   * Cleanup the residual files.
+   */
+  protected function cleanup() {
+    $this->runCommand('rm composer.drupalupdater.lock');
   }
 
   /**
