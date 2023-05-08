@@ -136,6 +136,7 @@ Update includes:
 
     if ($this->showFullReport) {
       $this->showPendingUpdates();
+      $this->showObsoleteDrupalModules();
     }
 
     $this->cleanup();
@@ -490,6 +491,16 @@ Update includes:
     else {
       $this->output->writeln("No packages have been updated\n");
     }
+  }
+
+  /**
+   * Shows all the drupal modules that are obsolete.
+   */
+  protected function showObsoleteDrupalModules() {
+    $this->printHeader2('Unsupported drupal modules:');
+    $this->output->writeln(
+      $this->runCommand(sprintf('drush php-script %s/../scripts/unsupported-modules.php', __DIR__)),
+    );
   }
 
   /**
