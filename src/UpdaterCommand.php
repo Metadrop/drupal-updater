@@ -497,7 +497,7 @@ Update includes:
    * Shows all the drupal modules that are obsolete.
    */
   protected function showObsoleteDrupalModules() {
-    $this->printHeader2('Unsupported drupal modules:');
+    $this->printHeader2('Unsupported Drupal modules:');
     $this->output->writeln(
       $this->runCommand(sprintf('drush php-script %s/../scripts/unsupported-modules.php', __DIR__)),
     );
