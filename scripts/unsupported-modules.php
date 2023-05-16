@@ -31,9 +31,9 @@ if (!empty($projects)) {
     ];
   }, $projects);
 
-  print json_encode($projects_unsupported_data);
-
 }
 else {
-  $this->output->writeln('This project does not contain obsolete modules.');
+  $projects_unsupported_data = [];
 }
+
+print json_encode($projects_unsupported_data);
