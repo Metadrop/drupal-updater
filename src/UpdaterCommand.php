@@ -8,6 +8,7 @@ use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Process\Exception\ProcessFailedException;
 use Symfony\Component\Process\Process;
+use Symfony\Component\Console\Helper\Table;
 
 /**
  * Updates drupal modules and packages.
@@ -498,9 +499,31 @@ Update includes:
    */
   protected function showObsoleteDrupalModules() {
     $this->printHeader2('Unsupported Drupal modules:');
-    $this->output->writeln(
-      $this->runCommand(sprintf('drush php-script %s/../scripts/unsupported-modules.php', __DIR__)),
-    );
+
+    $unsupported_modules_list = [];
+    foreach ($this->environments as $environment) {
+      $unsupported_modules = json_decode(trim($this
+        ->runCommand(sprintf('drush %s php-script %s/../scripts/unsupported-modules.php', $environment, __DIR__))
+        ->getOutput()));
+      foreach ($unsupported_modules as $unsupported_module) {
+        $unsupported_module = (array) $unsupported_module;
+        if (!isset($unsupported_modules_list[$unsupported_module['project_name']])) {
+          $unsupported_modules_list[$unsupported_module['project_name']] = $unsupported_module;
+        }
+        $unsupported_modules_list[$unsupported_module['project_name']]['environments'][] = $environment;
+      }
+    }
+
+    $unsupported_modules_list = array_values(array_map (function ($unsupported_module) {
+      $unsupported_module['environments'] = implode("\n", $unsupported_module['environments']);
+      return array_values($unsupported_module);
+    }, $unsupported_modules_list));
+
+    $fixed_drupal_advisories_table = new Table($this->output);
+    $fixed_drupal_advisories_table->setHeaders(['Module', 'Current version', 'Recommended version', 'Environment(s)']);
+    $fixed_drupal_advisories_table->setRows($unsupported_modules_list);
+    $fixed_drupal_advisories_table->render();
+
   }
 
   /**
