@@ -520,17 +520,22 @@ Update includes:
       return array_values($unsupported_module);
     }, $unsupported_modules_list));
 
-    $unsupported_modules_list_table_rows = [];
-    foreach ($unsupported_modules_list as $unsupported_module_info) {
-      $unsupported_modules_list_table_rows[] = $unsupported_module_info;
-      $unsupported_modules_list_table_rows[] = new TableSeparator();
-    }
-    $fixed_drupal_advisories_table = new Table($this->output);
-    $fixed_drupal_advisories_table->setHeaders(['Module', 'Current version', 'Recommended version', 'Environment(s)']);
+    if (!empty($unsupported_modules_list)) {
+      $unsupported_modules_list_table_rows = [];
+      foreach ($unsupported_modules_list as $unsupported_module_info) {
+        $unsupported_modules_list_table_rows[] = $unsupported_module_info;
+        $unsupported_modules_list_table_rows[] = new TableSeparator();
+      }
+      $fixed_drupal_advisories_table = new Table($this->output);
+      $fixed_drupal_advisories_table->setHeaders(['Module', 'Current version', 'Recommended version', 'Environment(s)']);
 
-    array_pop($unsupported_modules_list_table_rows);
-    $fixed_drupal_advisories_table->setRows($unsupported_modules_list_table_rows);
-    $fixed_drupal_advisories_table->render();
+      array_pop($unsupported_modules_list_table_rows);
+      $fixed_drupal_advisories_table->setRows($unsupported_modules_list_table_rows);
+      $fixed_drupal_advisories_table->render();
+    }
+    else {
+      $this->output->writeln('This project does not contain obsolete modules.');
+    }
 
   }
 
