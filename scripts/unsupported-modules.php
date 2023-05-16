@@ -35,5 +35,5 @@ if (!empty($projects)) {
 
 }
 else {
-  $output->writeln('This project does not contain obsolete modules.');
+  $this->output->writeln('This project does not contain obsolete modules.');
 }
