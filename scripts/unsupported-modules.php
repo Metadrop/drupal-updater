@@ -5,10 +5,7 @@
  */
 
 use Drupal\update\UpdateManagerInterface;
-use Symfony\Component\Console\Helper\Table;
-use Drush\Drush;
 
-$output = Drush::output();
 $updateManager = \Drupal::service('update.manager');
 $updateManager->refreshUpdateData();
 $projectData = $updateManager->getProjects();
@@ -28,16 +25,14 @@ if (!empty($projects)) {
     $recommended = $project['recommended'] != $project['existing_version']  ? $project['recommended'] : 'None';
 
     return [
-      $project['name'],
-      $project['existing_version'],
-      $recommended,
+      'project_name' => $project['name'],
+      'current_version' => $project['existing_version'],
+      'recommended_version' => $recommended,
     ];
   }, $projects);
 
-  $fixed_drupal_advisories_table = new Table($output);
-  $fixed_drupal_advisories_table->setHeaders(['Module', 'Current version', 'Recommended version']);
-  $fixed_drupal_advisories_table->setRows($projects_unsupported_data);
-  $fixed_drupal_advisories_table->render();
+  print json_encode($projects_unsupported_data);
+
 }
 else {
   $output->writeln('This project does not contain obsolete modules.');
