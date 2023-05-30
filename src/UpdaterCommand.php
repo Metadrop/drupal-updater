@@ -503,15 +503,21 @@ Update includes:
 
     $unsupported_modules_list = [];
     foreach ($this->environments as $environment) {
-      $unsupported_modules = json_decode(trim($this
-        ->runCommand(sprintf('drush %s php-script %s/../scripts/unsupported-modules.php', $environment, __DIR__))
-        ->getOutput()));
-      foreach ($unsupported_modules as $unsupported_module) {
-        $unsupported_module = (array) $unsupported_module;
-        if (!isset($unsupported_modules_list[$unsupported_module['project_name']])) {
-          $unsupported_modules_list[$unsupported_module['project_name']] = $unsupported_module;
+      try {
+        $unsupported_modules = json_decode(trim($this
+          ->runCommand(sprintf('drush %s php-script %s/../scripts/unsupported-modules.php', $environment, __DIR__))
+          ->getOutput()));
+        foreach ($unsupported_modules as $unsupported_module) {
+          $unsupported_module = (array) $unsupported_module;
+          if (!isset($unsupported_modules_list[$unsupported_module['project_name']])) {
+            $unsupported_modules_list[$unsupported_module['project_name']] = $unsupported_module;
+          }
+          $unsupported_modules_list[$unsupported_module['project_name']]['environments'][] = $environment;
         }
-        $unsupported_modules_list[$unsupported_module['project_name']]['environments'][] = $environment;
+      }
+      catch (ProcessFailedException $exception) {
+        $this->output->writeln('');
+        $this->output->write($exception->getMessage());
       }
     }
 
@@ -534,9 +540,8 @@ Update includes:
       $fixed_drupal_advisories_table->render();
     }
     else {
-      $this->output->writeln('This project does not contain obsolete modules.');
+      $this->output->writeln('No obsolete modules have been found. Perhaps Update module is not installed?');
     }
-
   }
 
   /**

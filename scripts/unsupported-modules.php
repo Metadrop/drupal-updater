@@ -6,6 +6,12 @@
 
 use Drupal\update\UpdateManagerInterface;
 
+$module_handler = \Drupal::moduleHandler();
+
+if (!$module_handler->moduleExists('update')) {
+  throw new Exception("Unable to report unsupported modules as Update module is not enabled in the site.");
+}
+
 $updateManager = \Drupal::service('update.manager');
 $updateManager->refreshUpdateData();
 $projectData = $updateManager->getProjects();
@@ -33,7 +39,10 @@ if (!empty($projects)) {
 
 }
 else {
+
   $projects_unsupported_data = [];
 }
 
 print json_encode($projects_unsupported_data);
+
+
