@@ -469,14 +469,18 @@ Update includes:
 
       $this->output->writeln('');
       $this->printHeader2('Not Updated Securities (ALL):');
-      $this->output->writeln(
-        $this->runCommand('composer audit --locked')->getOutput()
-      );
+      $composer_audit_securities = trim($this->runCommand('composer audit --locked --format plain 2>&1 | grep ^Package | cut -f2 -d: | sort -u')->getOutput());
 
-      $this->output->writeln(
-        $this->runCommand('./vendor/bin/drush pm:security --fields=name --format=list 2>/dev/null')->getOutput(),
-      );
+      try {
+        $drupal_securities = trim($this->runCommand('./vendor/bin/drush pm:security --fields=name --format=list 2>/dev/null')->getOutput());
+      }
+      catch (ProcessFailedException $e) {
+        $drupal_securities = trim($e->getProcess()->getOutput());
+      }
 
+      $securities = implode("\n", array_unique(explode("\n", $drupal_securities)));
+      $this->output->writeln($securities);
+      $this->output->writeln("");
     }
   }
 
