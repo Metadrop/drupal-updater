@@ -23,6 +23,12 @@ Before doing the installation, make sure your environment has composer 2.4 or hi
 composer require metadrop/drupal-updater
 ```
 
+Or, if you are using `ddev`:
+```bash
+ddev composer require metadrop/drupal-updater
+```
+
+
 ## How it works
 
 
