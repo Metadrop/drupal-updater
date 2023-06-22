@@ -13,6 +13,8 @@ This package works with:
 - Drush >=10.
 - Composer 2.4 (global).
 
+Or alternatively, you can run it inside tools like [ddev](https://ddev.com).
+
 ## Installation
 
 Before doing the installation, make sure your environment has composer 2.4 or higher installed locally.
@@ -20,6 +22,12 @@ Before doing the installation, make sure your environment has composer 2.4 or hi
 ```bash
 composer require metadrop/drupal-updater
 ```
+
+Or, if you are using `ddev`:
+```bash
+ddev composer require metadrop/drupal-updater
+```
+
 
 ## How it works
 
@@ -78,4 +86,14 @@ Examples:
 
   ```bash
   ./vendor/bin/drupal-updater --environments=@site1.local,@site2.local,@site3.local,@site4.local
+  ```
+
+### DDEV
+
+If you are using `ddev`, you can just run the commands above prepending `ddev exec`.
+
+Example:
+
+  ```bash
+  ddev exec ./vendor/bin/drupal-updater --security
   ```
