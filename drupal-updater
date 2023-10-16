@@ -24,5 +24,5 @@ use DrupalUpdater\UpdaterCommand;
 
 $app = new Application();
 $app->add(new UpdaterCommand());
-$app->setDefaultCommand('update', true);
+$app->setDefaultCommand('update');
 $app->run();
