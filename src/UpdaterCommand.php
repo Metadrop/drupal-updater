@@ -270,16 +270,6 @@ Update includes:
   protected function checkPackages() {
     if ($this->onlySecurity) {
       $packages_to_update = $this->runCommand(sprintf('composer audit --locked %s --format plain 2>&1 | grep ^Package | cut -f2 -d: | sort -u', $this->getNoDevParameter()))->getOutput();
-
-      try {
-        $drupal_security_packages = $this->runCommand('./vendor/bin/drush pm:security --fields=name --format=list 2>/dev/null')
-          ->getOutput();
-      }
-      catch (ProcessFailedException $e) {
-        $drupal_security_packages = $e->getProcess()->getOutput();
-      }
-
-      $packages_to_update = sprintf("%s\n%s", $packages_to_update, $drupal_security_packages);
     }
     else {
       $packages_to_update = $this->runCommand(sprintf('composer show --locked --direct --name-only %s 2>/dev/null', $this->getNoDevParameter()))
@@ -439,20 +429,10 @@ Update includes:
   protected function showPendingUpdates() {
 
     if ($this->onlySecurity) {
-      $this->printHeader2('Not Updated Securities (Packagist):');
+      $this->printHeader2('Not Updated Securities:');
       $this->output->writeln(
         $this->runCommand('composer audit --locked --format plain 2>&1 | grep ^Package | cut -f2 -d: | sort -u')->getOutput(),
       );
-
-      $this->printHeader2('Not Updated Securities (Drupal):');
-      try {
-        $this->output->writeln(
-          $this->runCommand('./vendor/bin/drush pm:security --fields=name --format=list 2>/dev/null')->getOutput(),
-        );
-      }
-      catch (ProcessFailedException $e) {
-        $this->output->writeln($e->getProcess()->getErrorOutput());
-      }
 
     }
     else {
@@ -469,17 +449,9 @@ Update includes:
 
       $this->output->writeln('');
       $this->printHeader2('Not Updated Securities (ALL):');
-      $composer_audit_securities = trim($this->runCommand('composer audit --locked --format plain 2>&1 | grep ^Package | cut -f2 -d: | sort -u')->getOutput());
-
-      try {
-        $drupal_securities = trim($this->runCommand('./vendor/bin/drush pm:security --fields=name --format=list 2>/dev/null')->getOutput());
-      }
-      catch (ProcessFailedException $e) {
-        $drupal_securities = trim($e->getProcess()->getOutput());
-      }
-
-      $securities = implode("\n", array_unique(explode("\n", $drupal_securities)));
-      $this->output->writeln($securities);
+      $this->output->writeln(
+        trim($this->runCommand('composer audit --locked --format plain 2>&1 | grep ^Package | cut -f2 -d: | sort -u')->getOutput())
+      );
       $this->output->writeln("");
     }
   }
