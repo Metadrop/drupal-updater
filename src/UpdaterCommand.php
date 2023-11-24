@@ -402,8 +402,107 @@ Update includes:
     $updated_packages = trim($this->runCommand('composer-lock-diff')->getOutput());
     $this->output->writeln($updated_packages . "\n");
 
-    $this->runCommand(sprintf('git commit -m "UPDATE - %s with dependencies" -m "%s" --author="%s" -n', $package, $updated_packages, $this->commitAuthor));
+    $commit_message = $this->calculateModuleUpdateCommitMessage($package);
 
+    $this->runCommand(sprintf('git commit -m "%s" -m "%s" --author="%s" -n', $commit_message, $updated_packages, $this->commitAuthor));
+
+  }
+
+  /**
+   * Calculate the commit message.
+   *
+   * Commit message is different depending on what have changed
+   * so that at a first glance developers may know what
+   * happened to the module.
+   *
+   * Changes can be:
+   *   - Package.
+   *   - Dependencies.
+   *   - Configuration.
+   *
+   * @param string $package
+   *   Package name.
+   *
+   * @return string
+   *   Format: UPDATE - <package>: (package)(, dependencies)(, configuration changes).
+   */
+  protected function calculateModuleUpdateCommitMessage(string $package) {
+
+    $changes = [];
+    $composer_lock_diff = $this->getComposerLockDiffJsonDecoded();
+    if ($this->isPackageUpdated($package, $composer_lock_diff)) {
+      $changes[] = 'package';
+    }
+
+    if ($this->areDependenciesUpdated($package, $composer_lock_diff)) {
+      $changes[] = 'dependencies';
+    }
+
+    if ($this->isConfigurationChanged()) {
+      $changes[] = 'configuration changes';
+    }
+
+    return sprintf('UPDATE - %s: %s', $package, implode(', ', $changes));
+  }
+
+  /**
+   * Check package has been updated.
+   *
+   * @param string $package_name
+   *   Package name.
+   * @param array $composer_lock_diff
+   *   Composer lock diff.
+   *
+   * @return bool
+   *   TRUE when the package is updated.
+   */
+  protected function isPackageUpdated(string $package_name, array $composer_lock_diff) {
+    return isset($composer_lock_diff['changes'][$package_name]) || isset($composer_lock_diff['changes-dev'][$package_name]);
+  }
+
+  /**
+   * Check package dependencies has been updated.
+   *
+   * @param string $package_name
+   *   Package name.
+   * @param array $composer_lock_diff
+   *   Composer lock diff.
+   *
+   * @return bool
+   *   TRUE when any dependency that isn't the package has changed.
+   */
+  protected function areDependenciesUpdated(string $package_name, array $composer_lock_diff) {
+    if (isset($composer_lock_diff['changes'][$package_name])) {
+      unset($composer_lock_diff['changes'][$package_name]);
+    }
+
+    if (isset($composer_lock_diff['changes-dev'][$package_name])) {
+      unset($composer_lock_diff['changes-dev'][$package_name]);
+    }
+    return !empty($composer_lock_diff['changes']) || !empty($composer_lock_diff['changes-dev']);
+  }
+
+  /**
+   * Checks that the configuration has changed.
+   *
+   * @return bool
+   *   TRUE when the configuration has changed.
+   */
+  protected function isConfigurationChanged() {
+    return ((int) trim($this->runCommand('git status -s | grep -v composer.json | grep -v composer.lock | grep -v composer.drupalupdater.lock | wc -l')->getOutput())) > 0;
+  }
+
+  /**
+   * Get composer lock diff decoded.
+   *
+   * @return array
+   *   Associative composer lock diff.
+   */
+  protected function getComposerLockDiffJsonDecoded() {
+    return json_decode(
+      trim($this->runCommand('composer-lock-diff --json')->getOutput()),
+      TRUE,
+    );
   }
 
   /**
