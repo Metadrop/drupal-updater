@@ -431,7 +431,8 @@ Update includes:
     $changes = [];
     $composer_lock_diff = $this->getComposerLockDiffJsonDecoded();
     if ($this->isPackageUpdated($package, $composer_lock_diff)) {
-      $changes[] = 'package';
+      [$package_update_from, $package_update_to] = $this->getPackageUpdate($package, $composer_lock_diff);
+      $changes[] = sprintf('package (%s -> %s)', $package_update_from, $package_update_to);
     }
 
     if ($this->areDependenciesUpdated($package, $composer_lock_diff)) {
@@ -450,6 +451,21 @@ Update includes:
   }
 
   /**
+   * Gets package update information.
+   *
+   * @param string $package_name
+   *   Package name.
+   * @param array $composer_lock_diff
+   *   Composer lock diff.
+   *
+   * @return array
+   *   Data indicating what has been updated.
+   */
+  protected function getPackageUpdate(string $package_name, array $composer_lock_diff) {
+    return $composer_lock_diff['changes'][$package_name] ?? $composer_lock_diff['changes-dev'][$package_name] ?? [];
+  }
+
+  /**
    * Check package has been updated.
    *
    * @param string $package_name
@@ -461,7 +477,7 @@ Update includes:
    *   TRUE when the package is updated.
    */
   protected function isPackageUpdated(string $package_name, array $composer_lock_diff) {
-    return isset($composer_lock_diff['changes'][$package_name]) || isset($composer_lock_diff['changes-dev'][$package_name]);
+    return !empty($this->getPackageUpdate($package_name, $composer_lock_diff));
   }
 
   /**
