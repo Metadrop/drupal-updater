@@ -442,6 +442,10 @@ Update includes:
       $changes[] = 'configuration changes';
     }
 
+    if (empty($changes)) {
+      $changes[] = 'other';
+    }
+
     return sprintf('UPDATE - %s: %s', $package, implode(', ', $changes));
   }
 
