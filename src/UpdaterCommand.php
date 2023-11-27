@@ -489,7 +489,7 @@ Update includes:
    *   TRUE when the configuration has changed.
    */
   protected function isConfigurationChanged() {
-    return ((int) trim($this->runCommand('git status -s | grep -v composer.json | grep -v composer.lock | grep -v composer.drupalupdater.lock | wc -l')->getOutput())) > 0;
+    return ((int) trim($this->runCommand('git status -s config | wc -l')->getOutput())) > 0;
   }
 
   /**
