@@ -398,9 +398,11 @@ Update includes:
 
     }
 
-    $this->output->writeln("\nUpdated packages:");
     $updated_packages = trim($this->runCommand('composer-lock-diff')->getOutput());
-    $this->output->writeln($updated_packages . "\n");
+    if (!empty($updated_packages)) {
+      $this->output->writeln("Updated packages:");
+      $this->output->writeln($updated_packages);
+    }
 
     $commit_message = $this->calculateModuleUpdateCommitMessage($package);
 
