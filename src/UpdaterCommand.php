@@ -132,7 +132,6 @@ Update includes:
     $this->output->writeln('');
     $this->printHeader1('3. Updating packages');
     $this->updatePackages($this->packagesToUpdate);
-    $this->output->writeln('');
     $this->printHeader1('4. Report');
     $this->showUpdatedPackages();
 
@@ -161,7 +160,7 @@ Update includes:
     }
 
     foreach ($environments as $environment) {
-      $this->output->writeln(sprintf("Running drush %s on the \"%s\" environment:\n", $command, $environment));
+      $this->output->writeln(sprintf("Running drush %s on the \"%s\" environment.", $command, $environment));
       $this->runCommand(sprintf('drush %s %s', $environment, $command));
     }
   }
@@ -237,6 +236,7 @@ Update includes:
   protected function consolidateConfiguration() {
     $this->runDrushCommand('cr');
     $this->runDrushCommand('cim -y');
+    $this->output->writeln('');
 
     foreach ($this->environments as $environment) {
       $this->output->writeln(sprintf('Consolidating %s environment', $environment));
@@ -254,10 +254,12 @@ Update includes:
         $environment,
         $this->commitAuthor
       ));
+      $this->output->writeln('');
     }
 
     $this->runDrushCommand('cr');
     $this->runDrushCommand('cim -y');
+    $this->output->writeln('');
   }
 
   /**
@@ -389,6 +391,7 @@ Update includes:
         $this->runDrushCommand('cr');
         $this->runDrushCommand('updb -y');
         $this->runDrushCommand('cex -y');
+        $this->output->writeln('');
         $this->runCommand('git add config');
       }
       catch (\Exception $e) {
@@ -401,7 +404,7 @@ Update includes:
     $updated_packages = trim($this->runCommand('composer-lock-diff')->getOutput());
     if (!empty($updated_packages)) {
       $this->output->writeln("Updated packages:");
-      $this->output->writeln($updated_packages);
+      $this->output->writeln("$updated_packages\n");
     }
 
     $commit_message = $this->calculateModuleUpdateCommitMessage($package);
@@ -584,7 +587,7 @@ Update includes:
     $updated_packages = $this->runCommand('composer-lock-diff  --from composer.drupalupdater.lock --to composer.lock')->getOutput();
     if (!empty($updated_packages)) {
       $this->output->writeln(
-        $updated_packages,
+        trim($updated_packages),
       );
     }
     else {
