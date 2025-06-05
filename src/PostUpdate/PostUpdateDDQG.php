@@ -36,7 +36,7 @@ class PostUpdateDDQG implements PostUpdateInterface {
 
     if ($this->processDDQGEntry($ignoreEntries, $moduleName, $oldVersion, $newVersion, $output)) {
       $json = json_encode($composerJson, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . "\n";
-      file_put_contents($composerJsonPath, $json);
+      file_put_contents('composer.json', $json);
       $this->runCommand('git add composer.json');
     }
 
