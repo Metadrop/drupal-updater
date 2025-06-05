@@ -5,6 +5,7 @@ namespace DrupalUpdater;
 use Composer\InstalledVersions;
 use DrupalUpdater\Config\Config;
 use DrupalUpdater\Config\ConfigInterface;
+use DrupalUpdater\PostUpdate\PostUpdateDDQG;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Input\InputOption;
@@ -42,6 +43,13 @@ class UpdaterCommand extends Command {
   protected bool $showFullReport = TRUE;
 
   /**
+   * List of post-update processors.
+   *
+   * @var \DrupalUpdater\PostUpdate\PostUpdateInterface[]
+   */
+  protected array $postUpdateProcessors = [];
+
+  /**
    * {@inheritdoc}
    */
   public function __construct(?string $name = null)
@@ -50,6 +58,8 @@ class UpdaterCommand extends Command {
       $name = 'update';
     }
     parent::__construct($name);
+
+    $this->postUpdateProcessors[] = new PostUpdateDDQG();
   }
 
   /**
@@ -587,6 +597,11 @@ Update includes:
 
     }
 
+    $composerLockDiff = $this->getComposerLockDiffJsonDecoded();
+    foreach ($this->postUpdateProcessors as $processor) {
+      $processor->execute($package, $composerLockDiff, $this->output);
+    }
+
     $updated_packages = trim($this->runCommand('composer-lock-diff')->getOutput());
     if (!empty($updated_packages)) {
       $this->output->writeln("Updated packages:");
@@ -900,5 +915,6 @@ Update includes:
   protected function printHeader2(string $text) {
     $this->output->writeln(sprintf("/// %s ///\n", $text));
   }
+
 
 }
