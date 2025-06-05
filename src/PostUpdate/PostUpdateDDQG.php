@@ -14,7 +14,7 @@ class PostUpdateDDQG implements PostUpdateInterface {
    * {@inheritdoc}
    */
   public function execute(string $package, array $composerLockDiff, OutputInterface $output) {
-    $composerJson = json_decode(file_get_contents($composerJsonPath), true);
+    $composerJson = json_decode(file_get_contents('composer.json'), true);
     if (!isset($composerJson['config']['audit']['ignore'])) {
       return false;
     }
