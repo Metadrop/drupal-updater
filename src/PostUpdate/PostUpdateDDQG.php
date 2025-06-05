@@ -6,7 +6,14 @@ use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Process\Process;
 
 /**
- * Post-update processor for DDQG ignore entries.
+ * Keeps up to date DDQG ignored errors after updating drupal modules.
+ *
+ * When the package is updated and release type is the same, or it is still
+ * unstable, update it.
+ * When the package release type has changed to abandoned / stable, remove it.
+ *
+ * This is done to save time maintaining composer.json to developers, as this
+ * action is repetitive and can be done automatically.
  */
 class PostUpdateDDQG implements PostUpdateInterface {
 
