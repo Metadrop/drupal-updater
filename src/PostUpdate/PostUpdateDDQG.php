@@ -14,8 +14,6 @@ class PostUpdateDDQG implements PostUpdateInterface {
    * {@inheritdoc}
    */
   public function execute(string $package, array $composerLockDiff, OutputInterface $output) {
-    $composerJsonPath = 'composer.json';
-
     $composerJson = json_decode(file_get_contents($composerJsonPath), true);
     if (!isset($composerJson['config']['audit']['ignore'])) {
       return false;
@@ -110,7 +108,7 @@ class PostUpdateDDQG implements PostUpdateInterface {
     elseif (str_contains($version, '-beta')) {
       return 'beta';
     }
-    elseif (str_contains($version, '-rc') || str_contains($version, '-RC')) {
+    elseif (str_contains(strtolower($version), '-rc')) {
       return 'rc';
     }
     return 'stable';
