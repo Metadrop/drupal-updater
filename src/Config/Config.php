@@ -194,7 +194,7 @@ class Config implements ConfigInterface {
     ];
 
     foreach ($integer_fields as $integer_field) {
-      if (isset($configuration[$integer_field]) && ($configuration[$integer_field] <= 0 || !is_int($configuration[$integer_field]))) {
+      if (isset($configuration[$integer_field]) && ($configuration[$integer_field] < 0 || !is_int($configuration[$integer_field]))) {
         throw new \InvalidArgumentException(sprintf('"%s" configuration key must be positive integer, %s given', $integer_field, gettype($configuration[$integer_field])));
       }
       else {
