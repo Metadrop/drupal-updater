@@ -38,6 +38,13 @@ class Config implements ConfigInterface {
   protected bool $noDev = false;
 
   /**
+   * Limit of updates.
+   *
+   * @var int
+   */
+  protected ?int $limit = null;
+
+  /**
    * Set to true to consolidate configuration.
    *
    * Used to allow not consolidating conrfiguration in special cases.
@@ -79,6 +86,24 @@ class Config implements ConfigInterface {
    */
   public function getEnvironments(): array {
     return $this->environments;
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function setLimit(int $limit) : void {
+    if ($limit <= 0) {
+      throw new \InvalidArgumentException('Invalid limit ' . $limit . '. It must be integer positive');
+    }
+
+    $this->limit = $limit;
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function getLimit() : ?int {
+    return $this->limit;
   }
 
   /**
@@ -157,10 +182,23 @@ class Config implements ConfigInterface {
 
     foreach ($string_fields as $string_field) {
       if (isset($configuration[$string_field]) && !is_string($configuration[$string_field])) {
-        throw new \InvalidArgumentException(sprintf('"%s" configuration key must be a string, %s given', $string_field, gettype($configuration['repository'])));
+        throw new \InvalidArgumentException(sprintf('"%s" configuration key must be a string, %s given', $string_field, gettype($configuration[$string_field])));
       }
       elseif (!empty($configuration[$string_field])) {
         $instance->{$string_field} = $configuration[$string_field];
+      }
+    }
+
+    $integer_fields = [
+      'limit',
+    ];
+
+    foreach ($integer_fields as $integer_field) {
+      if (isset($configuration[$integer_field]) && ($configuration[$integer_field] <= 0 || !is_int($configuration[$integer_field]))) {
+        throw new \InvalidArgumentException(sprintf('"%s" configuration key must be positive integer, %s given', $integer_field, gettype($configuration[$integer_field])));
+      }
+      else {
+        $instance->{$integer_field} = $configuration[$integer_field];
       }
     }
 
@@ -194,6 +232,15 @@ class Config implements ConfigInterface {
     }
 
     return $instance;
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function validate() : void {
+    if (!empty($this->packages) && !empty($this->limit)) {
+      throw new \InvalidArgumentException("The parameter packages and limit can't be used toguether.");
+    }
   }
 
 }

@@ -43,6 +43,13 @@ class UpdaterCommand extends Command {
   protected bool $showFullReport = TRUE;
 
   /**
+   * Total number of direct packages successfully updated.
+   *
+   * @var int
+   */
+  protected int $updatedPackages = 0;
+
+  /**
    * List of post-update processors.
    *
    * @var \DrupalUpdater\PostUpdate\PostUpdateInterface[]
@@ -78,6 +85,7 @@ Update includes:
     $this->addOption('security', 's', InputOption::VALUE_NEGATABLE, 'Choose to update only security packages');
     $this->addOption('dev', 'nd', InputOption::VALUE_NEGATABLE, 'Choose to update dev requirements.');
     $this->addOption('packages', 'pl', InputOption::VALUE_OPTIONAL, 'Comma separated list of packages to update');
+    $this->addOption('limit', 'l', InputOption::VALUE_OPTIONAL, 'Maximum number of direct packages to update. It must be integer positive, set to 0 for no limit.');
     $this->addOption('consolidate-configuration', 'cc', InputOption::VALUE_NEGATABLE, 'If false, configuration will not be consolidated.');
   }
 
@@ -88,6 +96,7 @@ Update includes:
     $this->output = $output;
     $this->setupConfig($input->getOption('config'));
     $this->mapInputToConfiguration($input);
+    $this->getConfiguration()->validate();
     $this->logConfiguration();
   }
 
@@ -135,9 +144,19 @@ Update includes:
       $this->showFullReport = FALSE;
     }
 
+    if (!empty($input->getOption('limit'))) {
+      $limit = (int) $input->getOption('limit');
+      if ($limit != $input->getOption('limit')) {
+        throw new \InvalidArgumentException('Invalid limit ' . $input->getOption('limit') . '. It must be integer positive');
+      }
+
+      $this->getConfiguration()->setLimit($limit);
+    }
+
     if (!empty($this->getConfiguration()->getPackages())) {
       $this->packagesToUpdate = $this->getConfiguration()->getPackages();
     }
+
   }
 
   /**
@@ -491,6 +510,12 @@ Update includes:
    */
   protected function updatePackages(array $package_list) {
     foreach ($package_list as $package) {
+      if (!empty($this->getConfiguration()->getLimit()) && $this->getConfiguration()->getLimit() > 0 && $this->updatedPackages == $this->getConfiguration()->getLimit()) {
+        $this->output->writeln(sprintf("Reached limit of %d direct packages, finishing...", $this->getConfiguration()->getLimit()));
+        $this->output->writeln('');
+        break;
+      }
+
       $this->updatePackage($package);
     }
   }
@@ -611,6 +636,7 @@ Update includes:
     $commit_message = $this->calculateModuleUpdateCommitMessage($package);
 
     $this->runCommand(sprintf('git commit -m "%s" -m "%s" --author="%s" -n', $commit_message, $updated_packages, $this->getConfiguration()->getAuthor()));
+    $this->updatedPackages++;
 
   }
 

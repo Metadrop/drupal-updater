@@ -102,4 +102,19 @@ interface ConfigInterface {
    */
   public function getConsolidateConfiguration();
 
+  /**
+   * Get the maximum number of direct packages to update.
+   */
+  public function setLimit(int $limit) : void;
+
+  /**
+   * Sets the maximum number of direct packages to update.
+   */
+  public function getLimit() : ?int;
+
+  /**
+   * Validates the configuration is correct.
+   */
+  public function validate() : void;
+
 }
