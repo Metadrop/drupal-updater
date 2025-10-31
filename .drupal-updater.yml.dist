@@ -8,4 +8,5 @@ onlySecurities: false
 packages: []
 # List of environments to update.
 environments: ['@self']
-
+# Limit of packages to update. Set to 0 for no limits.
+limit: 0
