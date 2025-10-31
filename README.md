@@ -56,6 +56,7 @@ The following variables can be setup through .drupal-updater.yml
 - **noDev**: Set to true to only update packages deployed in production.
 - **onlySecurities**: Set to true to only update securities.
 - **packages**: Allows specify which packages will be updated.
+- **limit**: Limit the number of direct packages to update in each drupal-updater run. Can't be combined with packages.
 - **environments**: Array list of environments to update.
 
 
@@ -86,6 +87,8 @@ Parameters allowed:
 - **--no-dev**: It won't update dev dependencies, only the primary ones.
 - **--author**: It sets the git commits author. Example: `Test<test@example.com>`
 - **--environment**: List of sites (drush alias) to be run on Drupal Multisites. The drush alias must be local.
+- **--packages**: Update only the mentioned packages.
+  **--limit**: Limit the number of direct packages to update in each drupal-updater run. Can't be combined with packages.
 
 Examples:
 
