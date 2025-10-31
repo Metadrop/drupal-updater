@@ -92,7 +92,7 @@ class Config implements ConfigInterface {
    * {@inheritdoc}
    */
   public function setLimit(int $limit) : void {
-    if ($limit <= 0) {
+    if ($limit < 0) {
       throw new \InvalidArgumentException('Invalid limit ' . $limit . '. It must be integer positive');
     }
 
