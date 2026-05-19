@@ -386,6 +386,17 @@ Update includes:
     $package_list_massaged = $this->massagePackageList($package_list);
     $this->packagesToUpdate = $this->findDirectPackagesFromList($package_list_massaged);
 
+    // Update core packages together if a core update is attempted.
+    // Otherwise, there may be conflicts updating them separately.
+    $drupal_packages = [
+      'drupal/core',
+      'drupal/core-recommended',
+    ];
+
+    if (!empty(array_intersect($drupal_packages, $this->packagesToUpdate))) {
+      $this->packagesToUpdate[] = 'drupal/core*';
+    }
+
     $this->output->writeln(implode("\n", $this->packagesToUpdate));
   }
 
