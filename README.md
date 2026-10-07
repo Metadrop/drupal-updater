@@ -11,7 +11,7 @@ It also allows update only securities.
 This package works with:
 
 - Drush >=10.
-- Composer 2.4 (global).
+- Composer >=2.4 installed as a global package [^1].
 
 Or alternatively, you can run it inside tools like [ddev](https://ddev.com).
 
@@ -131,3 +131,6 @@ Example:
   ```bash
   ddev exec ./vendor/bin/drupal-updater --security
   ```
+
+
+[^1]: Installing composer as a local package is discouraged. It may update itself on update process, plus generally the composer binary is designed to be used globally. 
