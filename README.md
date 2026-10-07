@@ -133,4 +133,4 @@ Example:
   ```
 
 
-[^1]: Installing composer as a local package is discouraged. It may update itself on update process, plus generally the composer binary is designed to be used globally. 
+[^1]: Using local composer (vendor/bin/composer) is discouraged. The drupal-updater command may update the self composer library and break the process with a Fatal error. Plus, generally, the composer binary is designed to be used globally.
