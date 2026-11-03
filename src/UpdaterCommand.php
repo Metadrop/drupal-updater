@@ -96,7 +96,6 @@ Update includes:
     $this->output = $output;
     $this->setupConfig($input->getOption('config'));
     $this->mapInputToConfiguration($input);
-    $this->getConfiguration()->validate();
     $this->logConfiguration();
   }
 
@@ -178,6 +177,12 @@ Update includes:
 
     if (!empty($this->getConfiguration()->getPackages())) {
       $this->output->writeln(sprintf('Selected packages: %s', implode(', ', $this->getConfiguration()->getPackages())));
+      if (!empty($this->getConfiguration()->getLimit())) {
+        $this->output->writeln(sprintf('Limit of %d direct packages ignored because a package list was provided', $this->getConfiguration()->getLimit()));
+      }
+    }
+    elseif (!empty($this->getEffectiveLimit())) {
+      $this->output->writeln(sprintf('Limit: %d direct packages', $this->getEffectiveLimit()));
     }
 
     $this->output->writeln('');
@@ -520,15 +525,34 @@ Update includes:
    *   List of packages to update.
    */
   protected function updatePackages(array $package_list) {
+    $limit = $this->getEffectiveLimit();
     foreach ($package_list as $package) {
-      if (!empty($this->getConfiguration()->getLimit()) && $this->getConfiguration()->getLimit() > 0 && $this->updatedPackages == $this->getConfiguration()->getLimit()) {
-        $this->output->writeln(sprintf("Reached limit of %d direct packages, finishing...", $this->getConfiguration()->getLimit()));
+      if (!empty($limit) && $this->updatedPackages >= $limit) {
+        $this->output->writeln(sprintf("Reached limit of %d direct packages, finishing...", $limit));
         $this->output->writeln('');
         break;
       }
 
       $this->updatePackage($package);
     }
+  }
+
+  /**
+   * Gets the limit of direct packages to update in this run.
+   *
+   * The limit is ignored when a list of packages is provided, as the user
+   * explicitly selected which packages must be updated.
+   *
+   * @return int|null
+   *   The limit, or NULL when there is no limit.
+   */
+  protected function getEffectiveLimit() : ?int {
+    if (!empty($this->getConfiguration()->getPackages())) {
+      return NULL;
+    }
+
+    $limit = $this->getConfiguration()->getLimit();
+    return !empty($limit) && $limit > 0 ? $limit : NULL;
   }
 
   /**
