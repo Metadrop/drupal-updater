@@ -112,9 +112,4 @@ interface ConfigInterface {
    */
   public function getLimit() : ?int;
 
-  /**
-   * Validates the configuration is correct.
-   */
-  public function validate() : void;
-
 }

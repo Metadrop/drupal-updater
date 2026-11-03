@@ -197,7 +197,7 @@ class Config implements ConfigInterface {
       if (isset($configuration[$integer_field]) && ($configuration[$integer_field] < 0 || !is_int($configuration[$integer_field]))) {
         throw new \InvalidArgumentException(sprintf('"%s" configuration key must be positive integer, %s given', $integer_field, gettype($configuration[$integer_field])));
       }
-      else {
+      elseif (isset($configuration[$integer_field])) {
         $instance->{$integer_field} = $configuration[$integer_field];
       }
     }
@@ -232,15 +232,6 @@ class Config implements ConfigInterface {
     }
 
     return $instance;
-  }
-
-  /**
-   * {@inheritdoc}
-   */
-  public function validate() : void {
-    if (!empty($this->packages) && !empty($this->limit)) {
-      throw new \InvalidArgumentException("The parameter packages and limit can't be used toguether.");
-    }
   }
 
 }
