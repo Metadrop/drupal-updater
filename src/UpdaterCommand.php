@@ -315,7 +315,16 @@ Update includes:
    */
   protected function runCommand(string $command) {
     $process = Process::fromShellCommandline($command);
-    $process->setTimeout(300);
+    // Match Composer itself, including an explicit shell timeout wrapper, but
+    // not other executables such as composer-lock-diff.
+    if (preg_match('/^\s*(?:timeout\s+\S+\s+)?composer\s/', $command)) {
+      $timeout = $this->getConfiguration()->getComposerTimeout();
+      $process->setTimeout($timeout);
+      $process->setEnv(['COMPOSER_PROCESS_TIMEOUT' => (string) $timeout]);
+    }
+    else {
+      $process->setTimeout(300);
+    }
     $process->run();
     if (!$process->isSuccessful()) {
       throw new \RuntimeException(sprintf('Error running "%s" command: %s', $command, $process->getErrorOutput()));
