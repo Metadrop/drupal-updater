@@ -10,3 +10,5 @@ packages: []
 environments: ['@self']
 # Limit of packages to update. Set to 0 for no limits.
 limit: 0
+# Timeout in seconds for each Composer command; other commands retain 300 seconds.
+composerTimeout: 300
