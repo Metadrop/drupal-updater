@@ -72,6 +72,31 @@ This module will try to update your dependencies based on how they are required 
 
 If a package has an available update and that update can't be done by running `composer update`, it won't do the upgrade. This means that not all packages will be upgraded, but most of them yes.
 
+### Final package issue report
+
+When package updates encounter problems, a final report lists the affected
+package, operation, and original reason:
+
+- **execution**: A Composer or Drush operation failed.
+- **constraint**: Composer reported a dependency conflict, or an available
+  update produced no compatible change under the current requirements.
+- **resolved**: A later successful package update changed a package involved
+  in an earlier Composer issue. The original reason is retained for context.
+
+An unrelated successful update does not clear a failure, and a Composer package
+change does not clear a Drush failure. Recorded issues are also printed if a
+later stage terminates with an exception. No empty report is printed for a run
+without package issues.
+
+This reporting change preserves the existing recovery behavior and exit codes.
+It does not add retries or a strict partial-failure exit mode.
+
+## Development tests
+
+See [tests/README.md](tests/README.md) for local setup and a reproducible CLI
+comparison against the upstream base. Hosted CI and a live Drupal site are not
+required for these tests.
+
 ## Usage
 
 Basic update:
