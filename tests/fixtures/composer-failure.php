@@ -19,7 +19,7 @@ if ($argv[1] === 'update') {
   exit(1);
 }
 if ($argv[1] === 'show') {
-  echo '{"locked":[]}';
+  echo in_array('--outdated', $argv) ? '{"locked":[]}' : "type : drupal-module\n";
   exit(0);
 }
 if ($argv[1] !== 'install') {

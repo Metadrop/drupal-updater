@@ -644,7 +644,7 @@ Update includes:
       $result = $this->runComposer('update', [$package, '--with-dependencies']);
     }
     catch (\Exception $e) {
-      $this->handlePackageUpdateErrors($e, $state, $required_tools);
+      $this->handleComposerUpdateErrors($e, $state, $required_tools);
       return;
     }
 
@@ -870,7 +870,7 @@ Update includes:
    * @throws \RuntimeException
    *   If recovery cannot restore consistent dependencies and required tools.
    */
-  protected function handlePackageUpdateErrors(\Exception $e, ComposerState $state, array $required_tools): void {
+  protected function handleComposerUpdateErrors(\Exception $e, ComposerState $state, array $required_tools): void {
     $this->output->writeln("\n!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
     $error_ouput = $e instanceof ProcessFailedException ? $e->getProcess()->getErrorOutput() : $e->getMessage();
     $this->output->writeln($error_ouput);
@@ -890,6 +890,16 @@ Update includes:
     catch (\Exception $recovery_error) {
       throw new \RuntimeException('Composer recovery failed; stopping to avoid inconsistent dependencies: ' . $recovery_error->getMessage(), 0, $recovery_error);
     }
+  }
+
+  /** Preserve the existing error handler for the separate Drush update path. */
+  protected function handlePackageUpdateErrors(\Exception $e) {
+    $this->output->writeln("\n!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
+    $error_ouput = $e instanceof ProcessFailedException ? $e->getProcess()->getErrorOutput() : $e->getMessage();
+    $this->output->writeln($error_ouput);
+    $this->output->writeln('Updating package FAILED: recovering previous state.');
+    $this->output->writeln('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!');
+    $this->runCommand('git checkout composer.json composer.lock');
   }
 
   /**
