@@ -892,30 +892,39 @@ Update includes:
 
     if ($this->getConfiguration()->onlyUpdateSecurities()) {
       $this->printHeader2('Not Updated Securities:');
-      $this->output->writeln(
+      $this->showPendingUpdateResult(
         $this->getPackagesWithAdvisories(),
+        'No pending security updates found.'
       );
 
     }
     else {
       $this->printHeader2('Not Updated Packages (Direct):');
-      $this->output->writeln(
-        $this->runCommand('composer show --locked --outdated --direct')->getOutput()
+      $this->showPendingUpdateResult(
+        $this->runCommand('composer show --locked --outdated --direct')->getOutput(),
+        'No pending direct package updates found.'
       );
 
       $this->output->writeln('');
       $this->printHeader2('Not Updated Packages (ALL):');
-      $this->output->writeln(
-        $this->runCommand('composer show --locked --outdated')->getOutput()
+      $this->showPendingUpdateResult(
+        $this->runCommand('composer show --locked --outdated')->getOutput(),
+        'No pending package updates found.'
       );
 
       $this->output->writeln('');
       $this->printHeader2('Not Updated Securities (ALL):');
-      $this->output->writeln(
-        trim($this->getPackagesWithAdvisories())
+      $this->showPendingUpdateResult(
+        trim($this->getPackagesWithAdvisories()),
+        'No pending security updates found.'
       );
       $this->output->writeln("");
     }
+  }
+
+  /** Print an explicit message instead of leaving an empty report category. */
+  protected function showPendingUpdateResult(string $result, string $empty_message): void {
+    $this->output->writeln(trim($result) === '' ? $empty_message : $result);
   }
 
   /**
