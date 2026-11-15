@@ -36,6 +36,10 @@ Each test creates a disposable Git/Composer project with Packagist disabled:
 4. Separately inject a recovery install failure and an install that returns
    success but leaves a required tool missing. Both must stop before attempting
    another package.
+5. Inject a Drush failure after a successful Composer command and verify that
+   the existing single-argument Drush error handler is still used. This guards
+   against routing that call through the new Composer recovery handler. It does
+   not introduce a new database recovery or exit-status policy.
 
 Only the failed mutation and exceptional recovery outcomes are injected. Normal
 fixture installation, recovery reinstallation, Git, the CLI entrypoint and
@@ -58,3 +62,7 @@ The base is expected to fail: Git checkout loses the temporary requirement and
 working dependency resolution, and it continues to later packages rather than
 performing and validating reinstallation. Run without the override to test the
 fix. Startup errors do not count as reproductions of the recovery bug.
+
+The three Composer recovery scenarios fail on pristine upstream; the Drush
+compatibility scenario passes there. That fourth scenario instead reproduces
+an argument-count regression in the initial PR #40 commit (`fc5ad47`).

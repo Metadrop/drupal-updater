@@ -68,6 +68,9 @@ class ComposerRecoveryCliTest extends TestCase {
     file_put_contents($this->directory . '/settings.yml', "consolidateConfiguration: false\n");
     file_put_contents($this->directory . '/control/composer', '#!' . PHP_BINARY . "\n" . file_get_contents(__DIR__ . '/fixtures/composer-failure.php'));
     chmod($this->directory . '/control/composer', 0755);
+    file_put_contents($this->directory . '/web/index.php', '<?php // Fixture Drupal root.');
+    file_put_contents($this->directory . '/control/drush', '#!' . PHP_BINARY . "\n<?php file_put_contents('drush-ran', 'yes'); fwrite(STDERR, 'deliberate Drupal failure'); exit(1);\n");
+    chmod($this->directory . '/control/drush', 0755);
     file_put_contents($this->directory . '/bootstrap.php', '<?php $loader = require ' . var_export(dirname(__DIR__) . '/vendor/autoload.php', TRUE) . '; $loader->setPsr4("DrupalUpdater\\\\", __DIR__."/vendor/metadrop/drupal-updater/src"); \Composer\InstalledVersions::reload(["root"=>["name"=>"example/project"],"versions"=>["drupal/core"=>["install_path"=>__DIR__."/web/core"]]]);');
   }
 
@@ -97,6 +100,16 @@ class ComposerRecoveryCliTest extends TestCase {
     self::assertStringContainsString('Required updater executable missing', $process->getOutput() . $process->getErrorOutput());
     self::assertSame(['update', 'install'], $this->operations());
     $this->assertWorkingStatePreserved();
+  }
+
+  public function testDrushFailureStillUsesItsExistingSingleArgumentHandler(): void {
+    $process = $this->updater('drush-fails', 'drupal/example');
+    $output = $process->getOutput() . $process->getErrorOutput();
+    self::assertFileExists($this->directory . '/drush-ran');
+    self::assertSame(0, $process->getExitCode(), $output);
+    self::assertStringContainsString('deliberate Drupal failure', $output);
+    self::assertStringNotContainsString('Too few arguments', $output);
+    self::assertNotContains('install', $this->operations());
   }
 
   private function updater(string $mode, string $packages = 'example/fail'): Process {
