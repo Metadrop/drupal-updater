@@ -11,6 +11,13 @@ class Config implements ConfigInterface {
 
   /** Composer process timeout, in seconds. */
   protected int $composerTimeout = 300;
+  protected int $composerAttempts = 3;
+  protected int $composerRetryDelay = 10;
+  protected int $composerAdditionalPasses = 1;
+
+  public function getComposerAttempts(): int { return $this->composerAttempts; }
+  public function getComposerRetryDelay(): int { return $this->composerRetryDelay; }
+  public function getComposerAdditionalPasses(): int { return $this->composerAdditionalPasses; }
 
   /** {@inheritdoc} */
   public function getComposerTimeout(): int {
@@ -183,6 +190,16 @@ class Config implements ConfigInterface {
 
     $instance = new static();
     $configuration = Yaml::parseFile($config_file);
+
+    foreach (['composerAttempts' => [1, 10], 'composerRetryDelay' => [0, 300], 'composerAdditionalPasses' => [0, 3]] as $key => $bounds) {
+      if (array_key_exists($key, $configuration ?? [])) {
+        $value = $configuration[$key];
+        if (!is_int($value) || $value < $bounds[0] || $value > $bounds[1]) {
+          throw new \InvalidArgumentException(sprintf('"%s" must be an integer between %d and %d.', $key, $bounds[0], $bounds[1]));
+        }
+        $instance->{$key} = $value;
+      }
+    }
 
     if (array_key_exists('composerTimeout', $configuration ?? [])) {
       if (!is_int($configuration['composerTimeout']) || $configuration['composerTimeout'] < 1) {

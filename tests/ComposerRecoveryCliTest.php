@@ -48,7 +48,7 @@ class ComposerRecoveryCliTest extends TestCase {
     $this->json('composer.json', $manifest);
     $this->installFixture();
     file_put_contents($this->directory . '/earlier-success.txt', 'retain earlier work');
-    foreach ([['git', 'init', '-q'], ['git', 'add', 'composer.json', 'composer.lock', 'earlier-success.txt'], ['git', '-c', 'user.name=Test', '-c', 'user.email=test@example.invalid', '-c', 'core.hooksPath=/dev/null', '-c', 'commit.gpgsign=false', 'commit', '-qm', 'Before temporary updater installation']] as $command) {
+    foreach ([['git', 'init', '-q'], ['git', 'config', 'user.name', 'Test'], ['git', 'config', 'user.email', 'test@example.invalid'], ['git', 'config', 'commit.gpgsign', 'false'], ['git', 'add', 'composer.json', 'composer.lock', 'earlier-success.txt'], ['git', '-c', 'core.hooksPath=/dev/null', 'commit', '-qm', 'Before temporary updater installation']] as $command) {
       $this->process($command);
     }
     // Neither temporary tooling nor the later successful dependency resolution
@@ -65,11 +65,11 @@ class ComposerRecoveryCliTest extends TestCase {
     ];
     self::assertStringContainsString('1.1.0', $this->before['lock']);
     self::assertStringNotContainsString('metadrop/drupal-updater', $this->process(['git', 'show', 'HEAD:composer.json'])->getOutput());
-    file_put_contents($this->directory . '/settings.yml', "consolidateConfiguration: false\n");
+    file_put_contents($this->directory . '/settings.yml', "consolidateConfiguration: false\ncomposerAdditionalPasses: 0\ncomposerAttempts: 1\n");
     file_put_contents($this->directory . '/control/composer', '#!' . PHP_BINARY . "\n" . file_get_contents(__DIR__ . '/fixtures/composer-failure.php'));
     chmod($this->directory . '/control/composer', 0755);
     file_put_contents($this->directory . '/web/index.php', '<?php // Fixture Drupal root.');
-    file_put_contents($this->directory . '/control/drush', '#!' . PHP_BINARY . "\n<?php file_put_contents('drush-ran', 'yes'); fwrite(STDERR, 'deliberate Drupal failure'); exit(1);\n");
+    file_put_contents($this->directory . '/control/drush', '#!' . PHP_BINARY . "\n<?php if (strpos(getenv('RECOVERY_TEST_MODE'), 'discovery-') === 0) { echo '[]'; exit(0); } file_put_contents('drush-ran', \"yes\\n\", FILE_APPEND); fwrite(STDERR, getenv('RECOVERY_TEST_MODE') === 'drush-transient' ? 'curl error 28: database connection timed out' : 'deliberate Drupal failure'); exit(1);\n");
     chmod($this->directory . '/control/drush', 0755);
     file_put_contents($this->directory . '/bootstrap.php', '<?php $loader = require ' . var_export(dirname(__DIR__) . '/vendor/autoload.php', TRUE) . '; $loader->setPsr4("DrupalUpdater\\\\", __DIR__."/vendor/metadrop/drupal-updater/src"); \Composer\InstalledVersions::reload(["root"=>["name"=>"example/project"],"versions"=>["drupal/core"=>["install_path"=>__DIR__."/web/core"]]]);');
   }
@@ -112,8 +112,195 @@ class ComposerRecoveryCliTest extends TestCase {
     self::assertNotContains('install', $this->operations());
   }
 
-  private function updater(string $mode, string $packages = 'example/fail'): Process {
-    $process = new Process($this->cliArguments(['update', '--config=settings.yml', '--packages=' . $packages, '--no-interaction']), $this->directory, [
+  public function testRetryTransientUpdateRecoversBeforeNextAttempt(): void {
+    $this->retryConfiguration(3);
+    $process = $this->updater('transient-once');
+    self::assertSame(0, $process->getExitCode(), $this->cliOutput($process));
+    self::assertSame(['update', 'install', 'update'], $this->mutations());
+    self::assertSame($this->before['json'], file_get_contents($this->directory . '/composer.json'));
+    self::assertSame($this->before['lock'], file_get_contents($this->directory . '/composer.lock'));
+    self::assertStringContainsString('[resolved] example/fail / composer-update (2 attempts)', $this->cliOutput($process));
+    self::assertStringContainsString('Composer command succeeded after retry.', $this->cliOutput($process));
+    self::assertSame(0, $this->process($this->cliArguments(['--help']))->getExitCode());
+  }
+
+  public function testRetryExhaustionKeepsRecoveredStateAndFinalReason(): void {
+    $this->retryConfiguration(3);
+    $process = $this->updater('recover');
+    self::assertSame(0, $process->getExitCode(), $this->cliOutput($process));
+    self::assertSame(['update', 'install', 'update', 'install', 'update', 'install'], $this->mutations());
+    $this->assertWorkingStatePreserved();
+    self::assertStringContainsString('[execution] example/fail / composer-update (3 attempts)', $this->cliOutput($process));
+    self::assertStringNotContainsString('Composer attempt 3/3 failed; retrying', $this->cliOutput($process));
+  }
+
+  public function testRetryDeterministicFailuresAreNotRepeated(): void {
+    $this->retryConfiguration(3);
+    foreach (['conflict', 'auth', 'unknown'] as $mode) {
+      if (is_file($this->directory . '/composer-calls.jsonl')) { unlink($this->directory . '/composer-calls.jsonl'); }
+      $process = $this->updater($mode);
+      self::assertSame(0, $process->getExitCode(), $this->cliOutput($process));
+      self::assertSame(['update', 'install'], $this->mutations());
+      self::assertStringNotContainsString('retrying in', $this->cliOutput($process));
+    }
+    $this->assertWorkingStatePreserved();
+  }
+
+  public function testRetryDisabledPerformsOneAttempt(): void {
+    $this->retryConfiguration(1);
+    $process = $this->updater('transient-once');
+    self::assertSame(0, $process->getExitCode(), $this->cliOutput($process));
+    self::assertSame(['update', 'install'], $this->mutations());
+    $this->assertWorkingStatePreserved();
+  }
+
+  public function testRetryRecoveryFailureStopsWithoutFurtherAttempts(): void {
+    $this->retryConfiguration(3);
+    $process = $this->updater('install-fails');
+    self::assertNotSame(0, $process->getExitCode());
+    self::assertSame(['update', 'install'], $this->mutations());
+    self::assertStringContainsString('Composer recovery failed; stopping', $this->cliOutput($process));
+    self::assertStringNotContainsString('retrying in', $this->cliOutput($process));
+  }
+
+  public function testRetryDrushFailureIsNotRepeated(): void {
+    $this->retryConfiguration(3);
+    $process = $this->updater('drush-fails', 'drupal/example');
+    self::assertSame(0, $process->getExitCode(), $this->cliOutput($process));
+    self::assertSame("yes\n", file_get_contents($this->directory . '/drush-ran'));
+    self::assertSame(['update'], $this->mutations());
+  }
+
+  public function testRetryDiscoveryTransientFailureSucceeds(): void {
+    $this->retryConfiguration(3);
+    $process = $this->updater('discovery-once', NULL);
+    self::assertSame(0, $process->getExitCode(), $this->cliOutput($process));
+    self::assertSame('2', file_get_contents($this->directory . '/discovery-attempts'));
+    self::assertSame([], $this->mutations());
+    self::assertStringContainsString('[resolved] run / composer show --locked --outdated --name-only', $this->cliOutput($process));
+  }
+
+  public function testRetryDiscoveryExhaustionStopsBeforeAnyUpdate(): void {
+    $this->retryConfiguration(3);
+    $process = $this->updater('discovery-always', NULL);
+    self::assertNotSame(0, $process->getExitCode());
+    self::assertSame('3', file_get_contents($this->directory . '/discovery-attempts'));
+    self::assertSame([], $this->mutations());
+    self::assertStringContainsString('HTTP/2 503 temporary failure', $this->cliOutput($process));
+    $this->assertWorkingStatePreserved();
+  }
+
+  public function testRetryBackoffWaitsOneThenTwoSeconds(): void {
+    $this->retryConfiguration(3, 1);
+    $process = $this->updater('transient-twice');
+    self::assertSame(0, $process->getExitCode(), $this->cliOutput($process));
+    self::assertStringContainsString('retrying in 1 seconds', $this->cliOutput($process));
+    self::assertStringContainsString('retrying in 2 seconds', $this->cliOutput($process));
+    $events = array_map(function ($line) { return json_decode($line, TRUE); }, file($this->directory . '/retry-events.jsonl', FILE_IGNORE_NEW_LINES));
+    $updates = array_values(array_filter($events, function ($event) { return $event['operation'] === 'update'; }));
+    self::assertCount(3, $updates);
+    self::assertGreaterThanOrEqual(1.0, $updates[1]['time'] - $updates[0]['time']);
+    self::assertGreaterThanOrEqual(2.0, $updates[2]['time'] - $updates[1]['time']);
+  }
+
+  public function testRetryProcessTimeoutCanRecoverOnLaterAttempt(): void {
+    $this->retryConfiguration(2);
+    file_put_contents($this->directory . '/settings.yml', "composerTimeout: 1\n", FILE_APPEND);
+    $started = microtime(TRUE);
+    $process = $this->updater('timeout-once');
+    self::assertSame(0, $process->getExitCode(), $this->cliOutput($process));
+    self::assertSame(['update', 'install', 'update'], $this->mutations());
+    self::assertStringContainsString('exceeded the timeout of 1 seconds', $this->cliOutput($process));
+    self::assertStringContainsString('Composer command succeeded after retry.', $this->cliOutput($process));
+    // Wait beyond the first child's delayed mutation: a surviving shell child
+    // must not corrupt the state after recovery/the successful next attempt.
+    $remaining = 2.2 - (microtime(TRUE) - $started);
+    if ($remaining > 0) { usleep((int) ($remaining * 1000000)); }
+    self::assertSame($this->before['json'], file_get_contents($this->directory . '/composer.json'));
+    self::assertSame($this->before['lock'], file_get_contents($this->directory . '/composer.lock'));
+  }
+
+  public function testAdditionalPassRecoversPendingTransientPackage(): void {
+    $this->retryConfiguration(1, 0, 1);
+    $process = $this->updater('transient-once');
+    self::assertSame(0, $process->getExitCode(), $this->cliOutput($process));
+    self::assertSame(['update', 'install', 'update'], $this->mutations());
+    self::assertStringContainsString('RETRY PASS 1/1', $this->cliOutput($process));
+    self::assertStringContainsString('[resolved] example/fail / composer-update (2 attempts)', $this->cliOutput($process));
+    self::assertSame(1, substr_count($this->cliOutput($process), '// SETUP //'));
+    self::assertSame($this->before['json'], file_get_contents($this->directory . '/composer.json'));
+    self::assertSame($this->before['lock'], file_get_contents($this->directory . '/composer.lock'));
+    self::assertSame(0, $this->process($this->cliArguments(['--help']))->getExitCode());
+  }
+
+  public function testAdditionalPassAndCommandBoundsAreBothHonored(): void {
+    $this->retryConfiguration(2, 0, 2);
+    $process = $this->updater('recover');
+    self::assertSame(0, $process->getExitCode(), $this->cliOutput($process));
+    self::assertSame(array_merge(...array_fill(0, 6, ['update', 'install'])), $this->mutations());
+    self::assertStringContainsString('RETRY PASS 1/2', $this->cliOutput($process));
+    self::assertStringContainsString('RETRY PASS 2/2', $this->cliOutput($process));
+    self::assertStringNotContainsString('RETRY PASS 3/', $this->cliOutput($process));
+    self::assertStringContainsString('[execution] example/fail / composer-update (6 attempts)', $this->cliOutput($process));
+    self::assertSame(1, substr_count($this->cliOutput($process), '[execution] example/fail / composer-update'));
+    $this->assertWorkingStatePreserved();
+  }
+
+  public function testAdditionalPassSkipsDeterministicErrors(): void {
+    $this->retryConfiguration(1, 0, 1);
+    foreach (['conflict', 'auth', 'unknown'] as $mode) {
+      if (is_file($this->directory . '/composer-calls.jsonl')) { unlink($this->directory . '/composer-calls.jsonl'); }
+      $process = $this->updater($mode);
+      self::assertSame(0, $process->getExitCode(), $this->cliOutput($process));
+      self::assertSame(['update', 'install'], $this->mutations());
+      self::assertStringNotContainsString('RETRY PASS', $this->cliOutput($process));
+    }
+    $this->assertWorkingStatePreserved();
+  }
+
+  public function testAdditionalPassDoesNotRepeatSuccessfulPackages(): void {
+    $this->retryConfiguration(1, 0, 1);
+    $process = $this->updater('transient-once', 'example/success,example/fail');
+    self::assertSame(0, $process->getExitCode(), $this->cliOutput($process));
+    $calls = array_map(function ($line) { return json_decode($line, TRUE); }, file($this->directory . '/composer-calls.jsonl', FILE_IGNORE_NEW_LINES));
+    $updates = array_values(array_filter($calls, function ($call) { return $call[0] === 'update'; }));
+    self::assertSame(['example/success', 'example/fail', 'example/fail'], array_column($updates, 1));
+    self::assertSame('2', trim($this->process(['git', 'rev-list', '--count', 'HEAD'])->getOutput()));
+    self::assertSame('retain earlier work', file_get_contents($this->directory . '/earlier-success.txt'));
+    self::assertStringContainsString('[resolved] example/fail', $this->cliOutput($process));
+  }
+
+  public function testAdditionalPassStopsOnFatalRecovery(): void {
+    $this->retryConfiguration(1, 0, 1);
+    $process = $this->updater('install-fails');
+    self::assertNotSame(0, $process->getExitCode());
+    self::assertSame(['update', 'install'], $this->mutations());
+    self::assertStringNotContainsString('RETRY PASS', $this->cliOutput($process));
+  }
+
+  public function testAdditionalPassDoesNotRepeatDrushFailures(): void {
+    $this->retryConfiguration(1, 0, 1);
+    $process = $this->updater('drush-transient', 'example/fail,drupal/example');
+    self::assertSame(0, $process->getExitCode(), $this->cliOutput($process));
+    self::assertSame("yes\n", file_get_contents($this->directory . '/drush-ran'));
+    self::assertSame(['update', 'install', 'update'], $this->mutations());
+    self::assertStringNotContainsString('RETRY PASS', $this->cliOutput($process));
+  }
+
+  private function retryConfiguration(int $attempts, int $delay = 0, int $additionalPasses = 0): void {
+    file_put_contents($this->directory . '/settings.yml', "consolidateConfiguration: false\ncomposerAdditionalPasses: $additionalPasses\ncomposerAttempts: $attempts\ncomposerRetryDelay: $delay\n");
+  }
+
+  private function mutations(): array {
+    return array_values(array_filter($this->operations(), function ($operation) { return in_array($operation, ['update', 'install']); }));
+  }
+
+  private function cliOutput(Process $process): string { return $process->getOutput() . $process->getErrorOutput(); }
+
+  private function updater(string $mode, ?string $packages = 'example/fail'): Process {
+    $arguments = ['update', '--config=settings.yml', '--no-interaction'];
+    if ($packages !== NULL) { $arguments[] = '--packages=' . $packages; }
+    $process = new Process($this->cliArguments($arguments), $this->directory, [
       'PATH' => $this->directory . '/control:' . $this->directory . '/vendor/bin:' . getenv('PATH'),
       'PWD' => $this->directory, 'RECOVERY_REAL_COMPOSER' => $this->composer,
       'RECOVERY_TEST_MODE' => $mode,

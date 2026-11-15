@@ -2,6 +2,10 @@
 
 file_put_contents('composer-calls.jsonl', json_encode(array_slice($argv, 1)) . "\n", FILE_APPEND);
 if ($argv[1] === 'show') {
+  if (getenv('REPORT_TEST_MODE') === 'limit-discovery' && in_array('--name-only', $argv)) {
+    echo "example/fail\nexample/success\n";
+    exit(0);
+  }
   if (in_array('--outdated', $argv)) {
     echo json_encode(['locked' => [['name' => 'example/noop', 'version' => '1.0.0', 'latest' => '1.1.0']]]);
   }
@@ -9,6 +13,7 @@ if ($argv[1] === 'show') {
   exit(0);
 }
 if ($argv[1] === 'install') { exit(0); }
+if ($argv[1] === 'audit') { exit(0); }
 if ($argv[1] !== 'update') { fwrite(STDERR, 'Unexpected fixture operation'); exit(90); }
 $package = $argv[2];
 if ($package === 'example/fail') {

@@ -61,6 +61,15 @@ The following variables can be setup through .drupal-updater.yml
 - **composerTimeout**: Positive integer timeout in seconds for each Composer
   command (default `300`). Sets both the Symfony Process timeout and the child
   `COMPOSER_PROCESS_TIMEOUT`. Other commands retain their 300-second timeout.
+- **composerAttempts**: Total attempts for eligible Composer commands, including
+  the first (default `3`, range `1`–`10`). Set to `1` to disable retries.
+- **composerRetryDelay**: Initial backoff in seconds (default `10`, range
+  `0`–`300`). The delay doubles after each eligible failure, capped at 300
+  seconds. A value of `0` disables waiting, not retries.
+- **composerAdditionalPasses**: Additional passes over unresolved transient
+  Composer package failures (default `1`, range `0`–`3`). Set to `0` to disable
+  extra passes. Set both this to `0` and `composerAttempts` to `1` to disable
+  both retry levels.
 
 For example, allow up to 30 minutes for each Composer command:
 
@@ -70,6 +79,39 @@ composerTimeout: 1800
 
 This is a per-command limit, not a limit for the complete updater run. An
 explicit shell limit such as `timeout 2 composer ...` still takes effect.
+
+### Bounded Composer retries
+
+Package updates and standalone read-only Composer commands can retry recognized
+timeouts, temporary connection/download errors, and temporary HTTP failures.
+The default allows three total attempts, with 10- and 20-second delays. Dependency
+conflicts, authentication/permission failures and unclassified errors are not
+retried. Every failed package attempt restores its pre-attempt Composer state
+and reinstalls dependencies before another attempt. A failed recovery stops the
+run immediately; the recovery install itself is never retried.
+
+On POSIX, standalone Composer invocations replace the intermediate shell so
+timeout signals reach Composer itself before recovery. Package discovery retains
+Composer stderr for classification. Commands embedded
+in legacy shell pipelines keep their existing behavior: pipelines such as the
+security audit filter may hide Composer's exit status, so they are not wrapped
+in this retry loop. Drush/database operations and Git commands are not retried.
+
+The final issue report retains failure reasons and attempt counts. A successful
+retry is marked resolved; exhausted failures remain unresolved. After the initial
+package pass, only unresolved transient Composer failures are eligible for the
+configured additional passes. Successful packages, constraints, terminal failures,
+and Drush failures are excluded. A later successful dependency update can remove
+a package from that queue. An unresolved Drush failure also suppresses all extra
+package passes, avoiding additional work after a possibly partial Drupal operation.
+The successful-package limit applies across all passes;
+the outdated-package cache is refreshed before an extra pass.
+
+Each extra pass has the same per-command attempt bound. Defaults therefore allow
+up to six attempts for a repeatedly failing package: three in the initial pass
+and three in one additional pass. Counts/reasons are retained in one issue entry
+across passes. Existing exit codes are preserved. No timeout escalation or
+whole-run deadline is introduced; each attempt uses `composerTimeout`.
 
 
 ## Development tests
@@ -117,8 +159,8 @@ change does not clear a Drush failure. Recorded issues are also printed if a
 later stage terminates with an exception. No empty report is printed for a run
 without package issues.
 
-This reporting change preserves the existing recovery behavior and exit codes.
-It does not add retries or a strict partial-failure exit mode.
+Issue reporting preserves the existing exit-code policy. A strict partial-failure
+exit mode is a separate change.
 
 
 ## Usage

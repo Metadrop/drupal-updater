@@ -44,7 +44,7 @@ class TimeoutCliTest extends TestCase {
     // Register the fixture Drupal install path for the CLI's normal root lookup.
     // This changes fixture metadata, not the command implementation.
     file_put_contents($this->directory . '/bootstrap.php', '<?php $loader = require ' . var_export($source . '/vendor/autoload.php', TRUE) . '; $loader->setPsr4("DrupalUpdater\\\\", ' . var_export($source . '/src', TRUE) . '); \Composer\InstalledVersions::reload(["root"=>["name"=>"example/project"],"versions"=>["drupal/core"=>["install_path"=>__DIR__."/web/core"]]]);');
-    file_put_contents($this->directory . '/settings.yml', "consolidateConfiguration: false\ncomposerTimeout: $timeout\n");
+    file_put_contents($this->directory . '/settings.yml', "consolidateConfiguration: false\ncomposerAdditionalPasses: 0\ncomposerAttempts: 1\ncomposerTimeout: $timeout\n");
     file_put_contents($this->directory . '/bin/composer', '#!' . PHP_BINARY . "\n" . <<<'PHP'
 <?php
 if ($argv[1] === 'update') {

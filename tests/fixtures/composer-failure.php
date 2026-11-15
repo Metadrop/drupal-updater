@@ -2,9 +2,21 @@
 
 // Controlled failed mutation; successful recovery invokes real offline Composer.
 file_put_contents('composer-calls.jsonl', json_encode(array_slice($argv, 1)) . "\n", FILE_APPEND);
+file_put_contents('retry-events.jsonl', json_encode(['operation' => $argv[1], 'time' => microtime(TRUE)]) . "\n", FILE_APPEND);
+$mode = getenv('RECOVERY_TEST_MODE');
 if ($argv[1] === 'update') {
   if ($argv[2] !== 'example/fail') {
     file_put_contents('later-package-ran', 'yes');
+    exit(0);
+  }
+  $count = is_file('update-attempts') ? (int) file_get_contents('update-attempts') : 0;
+  file_put_contents('update-attempts', (string) ++$count);
+  if ($mode === 'timeout-once' && $count === 1) { usleep(2000000); }
+  if (($mode === 'transient-once' && $count > 1) || ($mode === 'transient-twice' && $count > 2) || ($mode === 'timeout-once' && $count > 1)) {
+    $root = json_decode(file_get_contents('composer.json'), TRUE);
+    if (!isset($root['require']['metadrop/drupal-updater']) || !is_file('vendor/bin/composer-lock-diff')) {
+      fwrite(STDERR, 'Pre-attempt working state and tools were not restored'); exit(92);
+    }
     exit(0);
   }
   file_put_contents('composer.json', '{}');
@@ -15,13 +27,25 @@ if ($argv[1] === 'update') {
   foreach (['vendor/bin/drupal-updater', 'vendor/bin/composer-lock-diff'] as $path) {
     if (is_file($path) || is_link($path)) { unlink($path); }
   }
-  fwrite(STDERR, 'curl error 28: deliberate failed mutation');
+  $reasons = [
+    'conflict' => 'Your requirements could not be resolved to an installable set of packages.',
+    'auth' => 'HTTP/2 403 authentication failed; curl error 28 also present',
+    'unknown' => 'deliberate unclassified failure',
+  ];
+  fwrite(STDERR, $reasons[$mode] ?? 'curl error 28: deliberate failed mutation');
   exit(1);
 }
 if ($argv[1] === 'show') {
-  echo in_array('--outdated', $argv) ? '{"locked":[]}' : "type : drupal-module\n";
+  if (in_array('--name-only', $argv) && strpos($mode, 'discovery-') === 0) {
+    $count = is_file('discovery-attempts') ? (int) file_get_contents('discovery-attempts') : 0;
+    file_put_contents('discovery-attempts', (string) ++$count);
+    if ($count === 1 || $mode === 'discovery-always') { fwrite(STDERR, 'HTTP/2 503 temporary failure'); exit(1); }
+    exit(0);
+  }
+  echo in_array('--outdated', $argv) ? '{"locked":[]}' : (strpos($argv[2], 'drupal/') === 0 ? "type : drupal-module\n" : "type : library\n");
   exit(0);
 }
+if ($argv[1] === 'audit') { exit(0); }
 if ($argv[1] !== 'install') {
   fwrite(STDERR, 'Unexpected fixture operation: ' . $argv[1]);
   exit(90);

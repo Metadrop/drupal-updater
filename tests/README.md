@@ -1,5 +1,57 @@
 # Published prerequisite validation
 
+## Single #37 retry contribution
+
+The same contribution includes command retries and selective additional package
+passes. There is no separate additional-pass PR in this plan.
+
+The retry delta is based on the local integration `60c1586` of published PRs
+#39, #40 (including its Drush correction), and #41. It must be rebased onto
+their merged upstream equivalents before marking the dependent draft ready.
+The initial draft includes the integration history; its isolated comparison
+shows only the #37 contribution.
+
+```sh
+composer test
+composer lint
+composer test -- --filter testRetry tests/ComposerRecoveryCliTest.php
+```
+
+The full suite covers the published prerequisites plus retry configuration,
+classification, delay and package-pass bounds. Ten retry CLI scenarios exercise transient
+recovery, exhausted attempts, deterministic failures, disable settings, failed
+recovery, Drush non-retry behavior, discovery recovery/exhaustion, real 1/2-second
+backoff, and a real one-second Symfony Process timeout. Controlled failed
+mutations remove Composer files/tools; recovery invokes real offline Composer.
+Successful retry fixtures verify recovered files/tools before continuing. No
+updater method is replaced. The timeout fixture delays a filesystem mutation; the test waits past that
+deadline and verifies a terminated Composer process cannot mutate recovered state. No real Drupal database or
+naturally occurring download failure is part of these fixtures.
+
+To compare these scenarios against the prerequisite base, make a worktree at
+`60c1586` and set `UPDATER_TEST_SOURCE` to its absolute path. The candidate package
+copies that source into the fixture, sharing the test runner's dependencies.
+Run the focused command above: retry regressions should fail on that base;
+disable/deterministic/recovery-failure/Drush controls should still pass. The full
+suite without the override validates the retry change and prerequisites together.
+
+Prerequisite tests explicitly use one attempt to isolate their original
+contracts. The report fixtures acknowledge a recovery install without modeling
+dependency installation; the recovery fixtures perform the real Composer checks.
+The prerequisite integration was separately verified before adding retries.
+
+Eight further CLI scenarios verify selective passes: recovery on a later pass,
+the combined command/pass cap, rejection of terminal failures, no repetition of
+successful packages, immediate stop on failed recovery, no Drush replay, skipping
+an issue resolved by another update, and honoring the successful-package limit.
+Existing command-only scenarios explicitly disable additional passes to isolate
+their contracts. Select both `::testRetry` and `::testAdditionalPass` when comparing
+the complete #37 change with the prerequisite base.
+
+Standalone read-only commands are covered. Legacy shell pipelines that mask
+Composer's exit status remain outside this loop. No long delay is used to test
+the five-minute cap: the pure delay calculation is checked directly.
+
 The tests below are integrated from PRs #39, #40 and #41.
 
 # Composer timeout tests
