@@ -648,6 +648,11 @@ Update includes:
     if (!empty($available_update) && !empty($available_update->latest) && !$composer_lock_is_changed) {
       $this->output->writeln(sprintf("Package %s has an update available to %s version. Due to composer.json constraints, it hasn't been updated.\n", $package, $available_update->latest));
 
+      $this->output->writeln(sprintf(
+        'For more information, run: composer require %s -W --dry-run',
+        escapeshellarg($package . ':' . $available_update->latest)
+      ), OutputInterface::OUTPUT_RAW);
+
       $error_output = trim($result->getOutput());
       $valid_errors = [
         'but it conflicts with your root composer.json require',
