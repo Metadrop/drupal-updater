@@ -42,6 +42,9 @@ class UpdaterCommand extends Command {
 
   protected bool $showFullReport = TRUE;
 
+  /** Package issues retained for the final report, including later resolutions. */
+  protected array $packageIssues = [];
+
   /**
    * Total number of direct packages successfully updated.
    *
@@ -192,6 +195,17 @@ Update includes:
    * {@inheritdoc}
    */
   protected function execute(InputInterface $input, OutputInterface $output) : int {
+    $this->packageIssues = [];
+    try {
+      return $this->runUpdates();
+    }
+    finally {
+      $this->showPackageIssues();
+    }
+  }
+
+  /** Run the existing update workflow while retaining issues on early exit. */
+  protected function runUpdates(): int {
     $this->runCommand('cp composer.lock composer.drupalupdater.lock');
     $this->printSummary();
     $this->printHeader1('1. Consolidating configuration');
@@ -618,10 +632,14 @@ Update includes:
         $required_tools[] = $tool;
       }
     }
+    $before = $this->lockedPackageVersions();
     try {
       $result = $this->runComposer('update', [$package, '--with-dependencies']);
     }
     catch (\Exception $e) {
+      $reason = $this->packageErrorReason($e);
+      $kind = preg_match('/Your requirements could not be resolved to an installable set of packages|conflicts with your root composer.json require/i', $reason) ? 'constraint' : 'execution';
+      $this->recordPackageIssue($package, 'composer-update', $kind, $reason, $before[$package] ?? NULL);
       $this->handleComposerUpdateErrors($e, $state, $required_tools);
       return;
     }
@@ -631,6 +649,11 @@ Update includes:
     $available_update = $this->getAvailableUpdate($package);
     if (!empty($available_update) && !empty($available_update->latest) && !$composer_lock_is_changed) {
       $this->output->writeln(sprintf("Package %s has an update available to %s version. Due to composer.json constraints, it hasn't been updated.\n", $package, $available_update->latest));
+      // The cached outdated list may describe a version changed earlier in
+      // the run. Do not add a constraint if the locked package is now current.
+      if (($before[$package][0] ?? NULL) !== $available_update->latest) {
+        $this->recordPackageIssue($package, 'composer-update', 'constraint', 'No compatible change was produced by Composer; available version: ' . $available_update->latest, $before[$package] ?? NULL);
+      }
 
       $error_output = trim($result->getOutput());
       $valid_errors = [
@@ -667,6 +690,7 @@ Update includes:
         }
       }
       catch (\Exception $e) {
+        $this->recordPackageIssue($package, 'drush-update', 'execution', $this->packageErrorReason($e), $before[$package] ?? NULL);
         $this->handlePackageUpdateErrors($e);
         return;
       }
@@ -688,6 +712,7 @@ Update includes:
 
     $this->runCommand(sprintf('git commit -m "%s" -m "%s" --author="%s" -n', $commit_message, $updated_packages, $this->getConfiguration()->getAuthor()));
     $this->updatedPackages++;
+    $this->resolvePackageIssues($composerLockDiff);
 
   }
 
@@ -874,6 +899,59 @@ Update includes:
     $this->output->writeln('Updating package FAILED: recovering previous state.');
     $this->output->writeln('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!');
     $this->runCommand('git checkout composer.json composer.lock');
+  }
+
+  protected function packageErrorReason(\Exception $e): string {
+    $reason = $e instanceof ProcessFailedException ? trim($e->getProcess()->getErrorOutput()) : $e->getMessage();
+    return $reason !== '' ? $reason : $e->getMessage();
+  }
+
+  protected function recordPackageIssue(string $package, string $operation, string $kind, string $reason, ?array $before): void {
+    $this->packageIssues[] = [
+      'package' => $package, 'operation' => $operation, 'kind' => $kind,
+      'reason' => $reason, 'before' => $before, 'resolved' => FALSE,
+    ];
+  }
+
+  /** Best-effort fingerprints for reporting; do not interrupt update recovery. */
+  protected function lockedPackageVersions(): array {
+    $lock = json_decode(@file_get_contents('composer.lock') ?: '', TRUE);
+    $versions = [];
+    if (!is_array($lock)) {
+      return $versions;
+    }
+    foreach (array_merge((array) ($lock['packages'] ?? []), (array) ($lock['packages-dev'] ?? [])) as $package) {
+      if (!is_array($package) || !isset($package['name'], $package['version']) || !is_string($package['name']) || !is_string($package['version'])) {
+        continue;
+      }
+      $versions[$package['name']] = [$package['version'], $package['source']['reference'] ?? NULL, $package['dist']['reference'] ?? NULL];
+    }
+    return $versions;
+  }
+
+  /** Resolve only Composer issues for packages changed by a successful update. */
+  protected function resolvePackageIssues(array $diff): void {
+    $after = $this->lockedPackageVersions();
+    foreach ($this->packageIssues as &$issue) {
+      $package = $issue['package'];
+      if (!$issue['resolved'] && $issue['operation'] === 'composer-update' &&
+          $this->isPackageUpdated($package, $diff) && isset($after[$package]) && $after[$package] !== $issue['before']) {
+        $issue['resolved'] = TRUE;
+      }
+    }
+    unset($issue);
+  }
+
+  protected function showPackageIssues(): void {
+    if (empty($this->packageIssues)) {
+      return;
+    }
+    $this->printHeader1('Package update issues');
+    foreach ($this->packageIssues as $issue) {
+      $status = $issue['resolved'] ? 'resolved' : $issue['kind'];
+      $resolution = $issue['resolved'] ? ' (Resolved by a later successful package update.)' : '';
+      $this->output->writeln(sprintf('[%s] %s / %s: %s%s', $status, $issue['package'], $issue['operation'], $issue['reason'], $resolution), OutputInterface::OUTPUT_RAW);
+    }
   }
 
   /**
