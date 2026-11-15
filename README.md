@@ -72,6 +72,22 @@ This module will try to update your dependencies based on how they are required 
 
 If a package has an available update and that update can't be done by running `composer update`, it won't do the upgrade. This means that not all packages will be upgraded, but most of them yes.
 
+Before each package update, the updater saves the current `composer.json` and
+`composer.lock`, including uncommitted requirements. If the Composer update
+fails, those files are restored and `composer install --no-interaction
+--no-progress --no-scripts` reconciles installed dependencies. This preserves
+temporarily installed updater tools and earlier changes instead of checking
+out older Composer files from Git. If recovery fails or a previously available
+updater executable is missing, the run stops with an error.
+
+Recovery skips project scripts; Composer plugins can still execute. It restores
+Composer state and dependencies, not database changes or arbitrary project files.
+
+## Development tests
+
+Local setup and a reproducible base/head functional comparison are documented
+in [tests/README.md](tests/README.md).
+
 ## Usage
 
 Basic update:

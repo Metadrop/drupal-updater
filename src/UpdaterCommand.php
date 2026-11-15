@@ -602,11 +602,18 @@ Update includes:
    */
   protected function updatePackage(string $package) {
     $this->printHeader2(sprintf('Updating: %s', $package));
+    $state = new ComposerState();
+    $required_tools = [];
+    foreach (['vendor/bin/drupal-updater', 'vendor/bin/composer-lock-diff'] as $tool) {
+      if (is_file($tool)) {
+        $required_tools[] = $tool;
+      }
+    }
     try {
       $result = $this->runComposer('update', [$package, '--with-dependencies']);
     }
     catch (\Exception $e) {
-      $this->handlePackageUpdateErrors($e);
+      $this->handlePackageUpdateErrors($e, $state, $required_tools);
       return;
     }
 
@@ -816,21 +823,38 @@ Update includes:
   }
 
   /**
-   * Handle errors produced in a update.
-   *
-   * There are errors either in composer update or drush updb, in those
-   * case all the possible changes are reverted and the error message is shown.
+   * Restore dependencies after a failed Composer update.
    *
    * @param \Exception $e
-   *   Exception.
+   *   Original update failure.
+   * @param \DrupalUpdater\ComposerState $state
+   *   Working Composer files immediately before the update.
+   * @param array $required_tools
+   *   Updater executables present before the update.
+   *
+   * @throws \RuntimeException
+   *   If recovery cannot restore consistent dependencies and required tools.
    */
-  protected function handlePackageUpdateErrors(\Exception $e) {
+  protected function handlePackageUpdateErrors(\Exception $e, ComposerState $state, array $required_tools) {
     $this->output->writeln("\n!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
     $error_ouput = $e instanceof ProcessFailedException ? $e->getProcess()->getErrorOutput() : $e->getMessage();
     $this->output->writeln($error_ouput);
     $this->output->writeln('Updating package FAILED: recovering previous state.');
     $this->output->writeln('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!');
-    $this->runCommand('git checkout composer.json composer.lock');
+    try {
+      $state->restore();
+      // Restore installed dependencies without repeating project scripts or
+      // database operations. Composer plugins may still execute.
+      $this->runComposer('install', ['--no-interaction', '--no-progress', '--no-scripts']);
+      foreach ($required_tools as $tool) {
+        if (!is_file($tool)) {
+          throw new \RuntimeException('Required updater executable missing: ' . $tool);
+        }
+      }
+    }
+    catch (\Exception $recovery_error) {
+      throw new \RuntimeException('Composer recovery failed; stopping to avoid inconsistent dependencies: ' . $recovery_error->getMessage(), 0, $recovery_error);
+    }
   }
 
   /**
