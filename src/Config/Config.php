@@ -9,7 +9,11 @@ use Symfony\Component\Yaml\Yaml;
  */
 class Config implements ConfigInterface {
 
-  /** Composer process timeout, in seconds. */
+  /**
+   * Composer process timeout, in seconds.
+   *
+   * @var int
+   */
   protected int $composerTimeout = 300;
   protected int $composerAttempts = 3;
   protected int $composerRetryDelay = 10;
@@ -19,7 +23,9 @@ class Config implements ConfigInterface {
   public function getComposerRetryDelay(): int { return $this->composerRetryDelay; }
   public function getComposerAdditionalPasses(): int { return $this->composerAdditionalPasses; }
 
-  /** {@inheritdoc} */
+  /**
+   * {@inheritdoc}
+   */
   public function getComposerTimeout(): int {
     return $this->composerTimeout;
   }
