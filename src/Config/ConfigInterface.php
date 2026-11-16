@@ -23,12 +23,12 @@ interface ConfigInterface {
    * @param string $author
    *   Commits author.
    */
-  public function setAuthor(string $author);
+  public function setAuthor(string $author): void;
 
   /**
    * Gets the environment list.
    *
-   * @return array|string[]
+   * @return string[]
    *   List of environments.
    */
   public function getEnvironments() : array;
@@ -36,10 +36,10 @@ interface ConfigInterface {
   /**
    * Sets the environment list.
    *
-   * @param array $environments
+   * @param string[] $environments
    *   Environments.
    */
-  public function setEnvironments(array $environments);
+  public function setEnvironments(array $environments): void;
 
   /**
    * Indicates if only securities should be updated.
@@ -55,7 +55,7 @@ interface ConfigInterface {
    * @param bool $only_update_securities
    *   If true, only securities will be updated.
    */
-  public function setOnlySecurities(bool $only_update_securities);
+  public function setOnlySecurities(bool $only_update_securities): void;
 
   /**
    * Indicates whether not update dev packages.
@@ -71,12 +71,12 @@ interface ConfigInterface {
    * @param bool $no_dev
    *   If true, development packages won't be updated.
    */
-  public function setNoDev(bool $no_dev);
+  public function setNoDev(bool $no_dev): void;
 
   /**
    * Gets the list of packages to update.
    *
-   * @return array
+   * @return string[]
    *   List of packages to update.
    */
   public function getPackages() : array;
@@ -84,10 +84,10 @@ interface ConfigInterface {
   /**
    * Set the list of packages to update.
    *
-   * @param array $packages
+   * @param string[] $packages
    *   Packages list.
    */
-  public function setPackages(array $packages);
+  public function setPackages(array $packages): void;
 
   /**
    * Set if configuration should be or not procesed.
@@ -95,7 +95,7 @@ interface ConfigInterface {
    * @param bool $consolidate
    *   Set to true to import / export configuraton.
    */
-  public function setConsolidateConfiguration(bool $consolidate);
+  public function setConsolidateConfiguration(bool $consolidate): void;
 
   /**
    * Get if configuration must be exported or imported.

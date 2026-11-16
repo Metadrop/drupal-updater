@@ -14,11 +14,11 @@ interface PostUpdateInterface {
    *
    * @param string $package
    *   The package name being updated.
-   * @param array $composerLockDiff
+   * @param array<string, mixed> $composerLockDiff
    *   The composer lock diff data.
    * @param \Symfony\Component\Console\Output\OutputInterface $output
    *   The output interface for logging.
    */
-  public function execute(string $package, array $composerLockDiff, OutputInterface $output);
+  public function execute(string $package, array $composerLockDiff, OutputInterface $output): void;
 
 }

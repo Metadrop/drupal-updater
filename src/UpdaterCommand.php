@@ -35,13 +35,15 @@ class UpdaterCommand extends Command {
 
   /**
    * List of packages to update.
+   *
+   * @var string[]
    */
   protected array $packagesToUpdate;
 
   /**
    * Full list of outdated packages.
    *
-   * @var array
+   * @var \stdClass[]
    */
   protected array $outdatedPackages = [];
 
@@ -116,7 +118,7 @@ Update includes:
    * @param \Symfony\Component\Console\Input\InputInterface $input
    *   Input.
    */
-  protected function mapInputToConfiguration(InputInterface $input) {
+  protected function mapInputToConfiguration(InputInterface $input): void {
     if (!empty($input->getOption('environments'))) {
       $this->getConfiguration()->setEnvironments(explode(',', $input->getOption('environments')));
     }
@@ -148,7 +150,7 @@ Update includes:
 
     $packages_to_update_parameter = $input->getOption('packages') ?? '';
     if (!empty($packages_to_update_parameter)) {
-      $this->getConfiguration()->setPackages(explode(',', filter_var($packages_to_update_parameter, FILTER_SANITIZE_ADD_SLASHES)));
+      $this->getConfiguration()->setPackages(explode(',', addslashes($packages_to_update_parameter)));
       $this->showFullReport = FALSE;
     }
 
@@ -170,7 +172,7 @@ Update includes:
   /**
    * Show users what config will be applied to the current update.
    */
-  protected function logConfiguration() {
+  protected function logConfiguration(): void {
     $this->printHeader1('SETUP');
     $this->output->writeln('Drupal web root found at ' . $this->findDrupalWebRoot());
     $this->output->writeln(sprintf('Environments: %s', implode(', ', $this->getConfiguration()->getEnvironments())));
@@ -244,7 +246,7 @@ Update includes:
    * @param string $configuration_filepath
    *   Path to the configuration file.
    */
-  protected function setupConfig(string $configuration_filepath) {
+  protected function setupConfig(string $configuration_filepath): void {
     $this->output->writeln(sprintf('Selected configuration file: %s', $configuration_filepath));
 
     if (file_exists($configuration_filepath)) {
@@ -265,7 +267,7 @@ Update includes:
    * @param \DrupalUpdater\Config\ConfigInterface $config
    *   Configuration.
    */
-  protected function setConfiguration(ConfigInterface $config) {
+  protected function setConfiguration(ConfigInterface $config): void {
     $this->config = $config;
   }
 
@@ -284,11 +286,11 @@ Update includes:
    *
    * @param string $command
    *   Command to execute.
-   * @param array $environments
+   * @param string[] $environments
    *   Environments where the command needs to be executed.
    *   If empty, it will be executed in the environments passed to the command.
    */
-  protected function runDrushCommand(string $command, array $environments = []) {
+  protected function runDrushCommand(string $command, array $environments = []): void {
     if (empty($environments)) {
       $environments = $this->getConfiguration()->getEnvironments();
     }
@@ -326,7 +328,7 @@ Update includes:
    *
    * @param string $command
    *   Composer command.
-   * @param array $parameters
+   * @param string[] $parameters
    *   List of parameters the command needs.
    *
    * @return \Symfony\Component\Process\Process
@@ -352,7 +354,7 @@ Update includes:
   /**
    * Prints a summary listing what will be done in the script.
    */
-  protected function printSummary() {
+  protected function printSummary(): void {
     $this->printHeader1('Summary');
     $this->output->writeln('1. Consolidating configuration');
     $this->output->writeln('2. Checking packages');
@@ -368,7 +370,7 @@ Update includes:
    * doing one commit per environment. This implies that
    * configuration must be consistent before running the command.
    */
-  protected function consolidateConfiguration() {
+  protected function consolidateConfiguration(): void {
     $this->runDrushCommand('cr');
     $this->runDrushCommand('cim -y');
     $this->output->writeln('');
@@ -405,7 +407,7 @@ Update includes:
    * If security parameter is set, only security packages
    * will be updated.
    */
-  protected function checkPackages() {
+  protected function checkPackages(): void {
     if ($this->getConfiguration()->onlyUpdateSecurities()) {
       $package_list = $this
         ->runCommand(sprintf('composer audit --locked %s --format plain 2>&1 | grep ^Package | cut -f2 -d: | sort -u', $this->getNoDevParameter()))
@@ -436,10 +438,10 @@ Update includes:
   /**
    * Given a list of packages , find its direct packages.
    *
-   * @param array $packages_list
+   * @param string[] $packages_list
    *   Packages list.
    *
-   * @return array
+   * @return string[]
    *   List of direct packages.
    *
    * @see UpdaterCommand::findDirectPackage()
@@ -474,7 +476,7 @@ Update includes:
    *
    * @param string $package
    *   Package.
-   * @param array $direct_packages
+   * @param string[] $direct_packages
    *   List of direct packages.
    *
    * @return string
@@ -504,7 +506,7 @@ Update includes:
    *
    * @param string $command
    *   List that return packages list.
-   * @param array $package_list
+   * @param string[] $package_list
    *   List of packages we want to look for.
    *
    * @return string|null
@@ -534,7 +536,7 @@ Update includes:
    *   List of packages coming from a bash command
    *   (s.e.: composer show --names-only).
    *
-   * @return array
+   * @return string[]
    *   List of packages. Example:
    *    - metadrop/drupal-updater
    *    - metadrop/drupal-artifact-builder
@@ -545,17 +547,17 @@ Update includes:
       return trim($package);
     }, $package_list);
     return array_filter($package_list, function ($package) {
-      return preg_match('/^([A-Za-z0-9_-]*\/[A-Za-z0-9_-]*)/', $package);
+      return preg_match('/^([A-Za-z0-9_-]*\/[A-Za-z0-9_-]*)/', $package) === 1;
     });
   }
 
   /**
    * Updates the packages.
    *
-   * @param array $package_list
+   * @param string[] $package_list
    *   List of packages to update.
    */
-  protected function updatePackages(array $package_list) {
+  protected function updatePackages(array $package_list): void {
     $limit = $this->getEffectiveLimit();
     foreach ($package_list as $package) {
       if (!empty($limit) && $this->updatedPackages >= $limit) {
@@ -591,7 +593,7 @@ Update includes:
    *
    * It calculates the outdated packages only the first time.
    *
-   * @return array
+   * @return \stdClass[]
    *   List of all outdated packages.
    */
   protected function getAllOutdatedPackages() {
@@ -631,7 +633,7 @@ Update includes:
    * @param string $package
    *   PAckage to update.
    */
-  protected function updatePackage(string $package) {
+  protected function updatePackage(string $package): void {
     $this->printHeader2(sprintf('Updating: %s', $package));
     try {
       $result = $this->runComposer('update', [$package, '--with-dependencies']);
@@ -713,14 +715,14 @@ Update includes:
    * is docroot, and another complex structures that requires changing the
    * root folder.
    *
-   * @return string|void
-   *   Drupal root.
+   * @return string|null
+   *   Drupal root, or NULL when it is not found.
    */
-  protected function findDrupalWebRoot() {
-    $core = InstalledVersions::getInstallPath('drupal/core') . '/../';
-
-    if (!empty($core)) {
-      return realpath($core);
+  protected function findDrupalWebRoot(): ?string {
+    $core = InstalledVersions::isInstalled('drupal/core') ? InstalledVersions::getInstallPath('drupal/core') : NULL;
+    $root = $core !== NULL ? realpath($core . '/../') : FALSE;
+    if ($root !== FALSE) {
+      return $root;
     }
 
     foreach (['web', 'docroot', 'public_html'] as $folder) {
@@ -728,6 +730,8 @@ Update includes:
         return $folder;
       }
     }
+
+    return NULL;
   }
 
   /**
@@ -778,10 +782,10 @@ Update includes:
    *
    * @param string $package_name
    *   Package name.
-   * @param array $composer_lock_diff
+   * @param array<string, mixed> $composer_lock_diff
    *   Composer lock diff.
    *
-   * @return array
+   * @return string[]
    *   Data indicating what has been updated.
    */
   protected function getPackageUpdate(string $package_name, array $composer_lock_diff) {
@@ -793,7 +797,7 @@ Update includes:
    *
    * @param string $package_name
    *   Package name.
-   * @param array $composer_lock_diff
+   * @param array<string, mixed> $composer_lock_diff
    *   Composer lock diff.
    *
    * @return bool
@@ -808,7 +812,7 @@ Update includes:
    *
    * @param string $package_name
    *   Package name.
-   * @param array $composer_lock_diff
+   * @param array<string, mixed> $composer_lock_diff
    *   Composer lock diff.
    *
    * @return bool
@@ -838,7 +842,7 @@ Update includes:
   /**
    * Get composer lock diff decoded.
    *
-   * @return array
+   * @return array<string, mixed>
    *   Associative composer lock diff.
    */
   protected function getComposerLockDiffJsonDecoded() {
@@ -857,7 +861,7 @@ Update includes:
    * @param \Exception $e
    *   Exception.
    */
-  protected function handlePackageUpdateErrors(\Exception $e) {
+  protected function handlePackageUpdateErrors(\Exception $e): void {
     $this->output->writeln("\n!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
     $error_ouput = $e instanceof ProcessFailedException ? $e->getProcess()->getErrorOutput() : $e->getMessage();
     $this->output->writeln($error_ouput);
@@ -869,7 +873,7 @@ Update includes:
   /**
    * Shows all the pending updates.
    */
-  protected function showPendingUpdates() {
+  protected function showPendingUpdates(): void {
 
     if ($this->getConfiguration()->onlyUpdateSecurities()) {
       $this->printHeader2('Not Updated Securities:');
@@ -902,7 +906,7 @@ Update includes:
   /**
    * Show updated packages.
    */
-  protected function showUpdatedPackages() {
+  protected function showUpdatedPackages(): void {
     $updated_packages = $this->runCommand('composer-lock-diff  --from composer.drupalupdater.lock --to composer.lock')->getOutput();
     if (!empty($updated_packages)) {
       $this->output->writeln(
@@ -917,7 +921,7 @@ Update includes:
   /**
    * Shows all the drupal modules that are obsolete.
    */
-  protected function showObsoleteDrupalModules() {
+  protected function showObsoleteDrupalModules(): void {
     $this->printHeader2('Unsupported Drupal modules:');
 
     $unsupported_modules_list = [];
@@ -966,7 +970,7 @@ Update includes:
   /**
    * Cleanup the residual files.
    */
-  protected function cleanup() {
+  protected function cleanup(): void {
     $this->runCommand('rm composer.drupalupdater.lock');
   }
 
@@ -996,7 +1000,7 @@ Update includes:
    * @param string $text
    *   Header text.
    */
-  protected function printHeader1(string $text) {
+  protected function printHeader1(string $text): void {
     $this->output->writeln(sprintf("// %s //\n", strtoupper($text)));
   }
 
@@ -1006,7 +1010,7 @@ Update includes:
    * @param string $text
    *   Header text.
    */
-  protected function printHeader2(string $text) {
+  protected function printHeader2(string $text): void {
     $this->output->writeln(sprintf("/// %s ///\n", $text));
   }
 
