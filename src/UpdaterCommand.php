@@ -19,6 +19,7 @@ use Symfony\Component\Console\Helper\TableSeparator;
  * Updates drupal modules and packages.
  */
 class UpdaterCommand extends Command {
+
   /**
    * Prints the output of the command.
    *
@@ -866,13 +867,13 @@ Update includes:
    *   Original update failure.
    * @param \DrupalUpdater\ComposerState $state
    *   Working Composer files immediately before the update.
-   * @param array $required_tools
+   * @param string[] $required_tools
    *   Updater executables present before the update.
    *
    * @throws \RuntimeException
    *   If recovery cannot restore consistent dependencies and required tools.
    */
-  protected function handleComposerUpdateErrors(\Exception $e, ComposerState $state, array $required_tools) {
+  protected function handleComposerUpdateErrors(\Exception $e, ComposerState $state, array $required_tools): void {
     $this->output->writeln("\n!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
     $error_ouput = $e instanceof ProcessFailedException ? $e->getProcess()->getErrorOutput() : $e->getMessage();
     $this->output->writeln($error_ouput);
@@ -894,7 +895,12 @@ Update includes:
     }
   }
 
-  /** Preserve the existing error handler for the separate Drush update path. */
+  /**
+   * Preserve the existing error handler for the separate Drush update path.
+   *
+   * @param \Exception $e
+   *   Update failure.
+   */
   protected function handlePackageUpdateErrors(\Exception $e): void {
     $this->output->writeln("\n!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
     $error_ouput = $e instanceof ProcessFailedException ? $e->getProcess()->getErrorOutput() : $e->getMessage();
