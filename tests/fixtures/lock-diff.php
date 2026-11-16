@@ -1,5 +1,10 @@
 <?php
 
+/**
+ * @file
+ * Wraps the real composer-lock-diff, failing the final report on demand.
+ */
+
 if (getenv('REPORT_TEST_MODE') === 'fatal-report' && in_array('--from', $argv)) {
   fwrite(STDERR, 'deliberate final report failure');
   exit(1);
@@ -9,5 +14,7 @@ $process = proc_open(
   [0 => STDIN, 1 => STDOUT, 2 => STDERR],
   $pipes
 );
-if (!is_resource($process)) { exit(91); }
+if (!is_resource($process)) {
+  exit(91);
+}
 exit(proc_close($process));
