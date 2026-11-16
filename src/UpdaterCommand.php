@@ -19,6 +19,7 @@ use Symfony\Component\Console\Helper\TableSeparator;
  * Updates drupal modules and packages.
  */
 class UpdaterCommand extends Command {
+
   /**
    * Prints the output of the command.
    *
@@ -922,7 +923,9 @@ Update includes:
     }
   }
 
-  /** Print an explicit message instead of leaving an empty report category. */
+  /**
+   * Print an explicit message instead of leaving an empty report category.
+   */
   protected function showPendingUpdateResult(string $result, string $empty_message): void {
     $this->output->writeln(trim($result) === '' ? $empty_message : $result);
   }
