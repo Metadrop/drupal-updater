@@ -20,28 +20,33 @@ class PostUpdateDDQG implements PostUpdateInterface {
   /**
    * {@inheritdoc}
    */
-  public function execute(string $package, array $composerLockDiff, OutputInterface $output) {
-    $composerJson = json_decode(file_get_contents('composer.json'), true);
+  public function execute(string $package, array $composerLockDiff, OutputInterface $output): void {
+    $composerJsonContents = file_get_contents('composer.json');
+    if ($composerJsonContents === FALSE) {
+      return;
+    }
+
+    $composerJson = json_decode($composerJsonContents, TRUE);
     if (!isset($composerJson['config']['audit']['ignore'])) {
-      return false;
+      return;
     }
 
     $packageParts = explode('/', $package);
     if (count($packageParts) !== 2) {
-      return false;
+      return;
     }
     $moduleName = $packageParts[1];
 
     if (!$this->isPackageUpdated($package, $composerLockDiff)) {
-      return false;
+      return;
     }
 
     [$oldVersion, $newVersion] = $this->getPackageUpdate($package, $composerLockDiff);
 
-    // Find matching DDQG ignore entry and update if necessary
+    // Find matching DDQG ignore entry and update if necessary.
     $ignoreEntries = &$composerJson['config']['audit']['ignore'];
 
-    if ($this->processDDQGEntry($ignoreEntries, $moduleName, $oldVersion, $newVersion, $output)) {
+    if ($this->processDdqgEntry($ignoreEntries, $moduleName, $oldVersion, $newVersion, $output)) {
       $json = json_encode($composerJson, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES) . "\n";
       file_put_contents('composer.json', $json);
       $this->runCommand('git add composer.json');
@@ -52,7 +57,7 @@ class PostUpdateDDQG implements PostUpdateInterface {
   /**
    * Process a DDQG ignore entry for a module.
    *
-   * @param array &$ignoreEntries
+   * @param array<string, string> &$ignoreEntries
    *   Reference to the ignore entries array.
    * @param string $moduleName
    *   The module name without vendor prefix.
@@ -66,10 +71,10 @@ class PostUpdateDDQG implements PostUpdateInterface {
    * @return bool
    *   TRUE if the entry was modified, FALSE otherwise.
    */
-  protected function processDDQGEntry(array &$ignoreEntries, string $moduleName, string $oldVersion, string $newVersion, OutputInterface $output): bool {
+  protected function processDdqgEntry(array &$ignoreEntries, string $moduleName, string $oldVersion, string $newVersion, OutputInterface $output): bool {
     foreach ($ignoreEntries as $key => $message) {
       // Match pattern: DDQG-unsupported-drupal-{module_name}-{version}.
-      if (preg_match('/^DDQG-unsupported-drupal-' . preg_quote($moduleName) . '-(.+)$/', $key, $matches)) {
+      if (preg_match('/^DDQG-unsupported-drupal-' . preg_quote($moduleName, '/') . '-(.+)$/', $key, $matches)) {
         $oldReleaseType = $this->getReleaseType($oldVersion);
         $newReleaseType = $this->getReleaseType($newVersion);
 
@@ -77,26 +82,26 @@ class PostUpdateDDQG implements PostUpdateInterface {
         if ($this->isPackageAbandoned($newVersion) && !$this->isPackageAbandoned($oldVersion)) {
           unset($ignoreEntries[$key]);
           $output->writeln("Removed DDQG ignore entry for $moduleName (now abandoned)");
-          return true;
+          return TRUE;
         }
 
         // Do not ignore it anymore as its stable.
         if ($newReleaseType === 'stable' && $oldReleaseType !== 'stable') {
           unset($ignoreEntries[$key]);
           $output->writeln("Removed DDQG ignore entry for $moduleName (now stable)");
-          return true;
+          return TRUE;
         }
 
         // It is still not stable / it hasn't changed its version.
-        $newKey = 'DDQG-unsupported-drupal-' . $moduleName . '-' . $this->formatVersionForDDQG($newVersion);
+        $newKey = 'DDQG-unsupported-drupal-' . $moduleName . '-' . $this->formatVersionForDdqg($newVersion);
         unset($ignoreEntries[$key]);
         $ignoreEntries[$newKey] = $message;
         $output->writeln("Updated DDQG ignore entry for $moduleName: $oldVersion -> $newVersion");
-        return true;
+        return TRUE;
       }
     }
 
-    return false;
+    return FALSE;
   }
 
   /**
@@ -143,7 +148,7 @@ class PostUpdateDDQG implements PostUpdateInterface {
    * @return string
    *   The formatted version (e.g., "2.0.0.0-alpha3").
    */
-  protected function formatVersionForDDQG(string $version): string {
+  protected function formatVersionForDdqg(string $version): string {
     // DDQG format appears to use x.x.x.x format
     // If version has 3 parts (x.x.x), add a .0.
     $parts = explode('-', $version);
@@ -163,7 +168,7 @@ class PostUpdateDDQG implements PostUpdateInterface {
    *
    * @param string $packageName
    *   Package name.
-   * @param array $composerLockDiff
+   * @param array<string, mixed> $composerLockDiff
    *   Composer lock diff.
    *
    * @return bool
@@ -178,10 +183,10 @@ class PostUpdateDDQG implements PostUpdateInterface {
    *
    * @param string $packageName
    *   Package name.
-   * @param array $composerLockDiff
+   * @param array<string, mixed> $composerLockDiff
    *   Composer lock diff.
    *
-   * @return array
+   * @return string[]
    *   Data indicating what has been updated.
    */
   protected function getPackageUpdate(string $packageName, array $composerLockDiff): array {

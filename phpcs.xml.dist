@@ -1,0 +1,13 @@
+<?xml version="1.0"?>
+<ruleset name="drupal-updater">
+  <description>Drupal coding standard for drupal-updater.</description>
+
+  <file>src</file>
+  <file>tests</file>
+  <file>scripts</file>
+
+  <arg name="extensions" value="php"/>
+  <arg value="sp"/>
+
+  <rule ref="Drupal"/>
+</ruleset>
