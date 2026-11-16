@@ -3,24 +3,38 @@
 namespace DrupalUpdater\Tests;
 
 use DrupalUpdater\Config\Config;
-use DrupalUpdater\UpdaterCommand;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\Process\Process;
 
-/** Exposes the command runner without replacing its behavior. */
-class TimeoutCommand extends UpdaterCommand {
-  public function __construct(Config $config) {
-    parent::__construct();
-    $this->setConfiguration($config);
-  }
-  public function executeShell(string $command): Process { return $this->runCommand($command); }
-}
-
+/**
+ * Tests the Composer timeout applied by the command runner.
+ */
 class TimeoutProcessTest extends TestCase {
+
+  /**
+   * Temporary directory holding the fake Composer executable.
+   *
+   * @var string
+   */
   private string $directory;
+
+  /**
+   * PATH environment variable before the test.
+   *
+   * @var string
+   */
   private string $previousPath;
+
+  /**
+   * PATH values of $_SERVER and $_ENV before the test.
+   *
+   * @var array<int, string|null>
+   */
   private array $previousEnvironment;
 
+  /**
+   * Puts a fake Composer executable first in the PATH.
+   */
   protected function setUp(): void {
     $this->previousPath = getenv('PATH');
     $this->previousEnvironment = [$_SERVER['PATH'] ?? NULL, $_ENV['PATH'] ?? NULL];
@@ -32,16 +46,32 @@ class TimeoutProcessTest extends TestCase {
     $_SERVER['PATH'] = $_ENV['PATH'] = $this->directory . ':' . $this->previousPath;
   }
 
+  /**
+   * Restores the PATH and removes the temporary directory.
+   */
   protected function tearDown(): void {
     putenv('PATH=' . $this->previousPath);
-    if ($this->previousEnvironment[0] === NULL) { unset($_SERVER['PATH']); }
-    else { $_SERVER['PATH'] = $this->previousEnvironment[0]; }
-    if ($this->previousEnvironment[1] === NULL) { unset($_ENV['PATH']); }
-    else { $_ENV['PATH'] = $this->previousEnvironment[1]; }
-    foreach (glob($this->directory . '/*') as $file) { unlink($file); }
+    if ($this->previousEnvironment[0] === NULL) {
+      unset($_SERVER['PATH']);
+    }
+    else {
+      $_SERVER['PATH'] = $this->previousEnvironment[0];
+    }
+    if ($this->previousEnvironment[1] === NULL) {
+      unset($_ENV['PATH']);
+    }
+    else {
+      $_ENV['PATH'] = $this->previousEnvironment[1];
+    }
+    foreach (glob($this->directory . '/*') as $file) {
+      unlink($file);
+    }
     rmdir($this->directory);
   }
 
+  /**
+   * Tests Composer commands get the configured timeout in both settings.
+   */
   public function testComposerCommandsUseBothTimeoutSettings(): void {
     $command = $this->command();
     foreach (['composer show', 'composer show 2>/dev/null', 'composer audit | cat'] as $shell) {
@@ -53,6 +83,9 @@ class TimeoutProcessTest extends TestCase {
     self::assertSame(300.0, (new TimeoutCommand(new Config()))->executeShell('composer show')->getTimeout());
   }
 
+  /**
+   * Tests non-Composer commands keep the default timeout.
+   */
   public function testOtherCommandsKeepTheirExistingTimeout(): void {
     foreach (['printf composer', 'git --version'] as $shell) {
       $process = $this->command()->executeShell($shell);
@@ -64,6 +97,9 @@ class TimeoutProcessTest extends TestCase {
     self::assertSame(300.0, $this->command()->executeShell('composer-lock-diff')->getTimeout());
   }
 
+  /**
+   * Tests a shorter timeout set in the shell command still applies.
+   */
   public function testExplicitShortShellTimeoutStillApplies(): void {
     if ((new Process(['sh', '-c', 'command -v timeout']))->run() !== 0) {
       self::markTestSkipped('Requires the timeout executable.');
@@ -80,9 +116,13 @@ class TimeoutProcessTest extends TestCase {
     self::assertLessThan(1.5, microtime(TRUE) - $start);
   }
 
+  /**
+   * Creates the command with a 1800 seconds Composer timeout.
+   */
   private function command(): TimeoutCommand {
     $path = $this->directory . '/settings.yml';
     file_put_contents($path, 'composerTimeout: 1800');
     return new TimeoutCommand(Config::createFromConfigurationFile($path));
   }
+
 }

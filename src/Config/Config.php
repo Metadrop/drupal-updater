@@ -9,10 +9,16 @@ use Symfony\Component\Yaml\Yaml;
  */
 class Config implements ConfigInterface {
 
-  /** Composer process timeout, in seconds. */
+  /**
+   * Composer process timeout, in seconds.
+   *
+   * @var int
+   */
   protected int $composerTimeout = 300;
 
-  /** {@inheritdoc} */
+  /**
+   * {@inheritdoc}
+   */
   public function getComposerTimeout(): int {
     return $this->composerTimeout;
   }
