@@ -19,7 +19,7 @@ class Config implements ConfigInterface {
   /**
    * List of environments to update.
    *
-   * @var array|string[]
+   * @var string[]
    */
   protected array $environments = ['@self'];
 
@@ -28,21 +28,21 @@ class Config implements ConfigInterface {
    *
    * @var bool
    */
-  protected bool $onlySecurities = false;
+  protected bool $onlySecurities = FALSE;
 
   /**
    * Set to true to only update production packages.
    *
    * @var bool
    */
-  protected bool $noDev = false;
+  protected bool $noDev = FALSE;
 
   /**
    * Limit of updates.
    *
    * @var int
    */
-  protected ?int $limit = null;
+  protected ?int $limit = NULL;
 
   /**
    * Set to true to consolidate configuration.
@@ -51,19 +51,19 @@ class Config implements ConfigInterface {
    *
    * @var bool
    */
-  protected bool $consolidateConfiguration = true;
+  protected bool $consolidateConfiguration = TRUE;
 
   /**
    * If set, only this packages will be updated, along its dependencies.
    *
-   * @var array
+   * @var string[]
    */
   protected array $packages = [];
 
   /**
    * {@inheritdoc}
    */
-  public function setAuthor(string $author) {
+  public function setAuthor(string $author): void {
     $this->author = $author;
   }
 
@@ -77,7 +77,7 @@ class Config implements ConfigInterface {
   /**
    * {@inheritdoc}
    */
-  public function setEnvironments(array $environments) {
+  public function setEnvironments(array $environments): void {
     $this->environments = $environments;
   }
 
@@ -109,7 +109,7 @@ class Config implements ConfigInterface {
   /**
    * {@inheritdoc}
    */
-  public function setOnlySecurities(bool $onlySecurities) {
+  public function setOnlySecurities(bool $onlySecurities): void {
     $this->onlySecurities = $onlySecurities;
   }
 
@@ -123,7 +123,7 @@ class Config implements ConfigInterface {
   /**
    * {@inheritdoc}
    */
-  public function setNoDev(bool $noDev) {
+  public function setNoDev(bool $noDev): void {
     $this->noDev = $noDev;
   }
 
@@ -137,7 +137,7 @@ class Config implements ConfigInterface {
   /**
    * {@inheritdoc}
    */
-  public function setPackages(array $packages) {
+  public function setPackages(array $packages): void {
     $this->packages = $packages;
   }
 
@@ -151,7 +151,7 @@ class Config implements ConfigInterface {
   /**
    * {@inheritdoc}
    */
-  public function setConsolidateConfiguration(bool $consolidate) {
+  public function setConsolidateConfiguration(bool $consolidate): void {
     $this->consolidateConfiguration = $consolidate;
   }
 
@@ -171,9 +171,9 @@ class Config implements ConfigInterface {
    * @return self
    *   Configuration ready to use.
    */
-  public static function createFromConfigurationFile(string $config_file) {
+  public static function createFromConfigurationFile(string $config_file): self {
 
-    $instance = new static();
+    $instance = new self();
     $configuration = Yaml::parseFile($config_file);
 
     $string_fields = [
