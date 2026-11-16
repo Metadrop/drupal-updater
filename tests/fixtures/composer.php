@@ -19,9 +19,16 @@ if ($argv[1] === 'show') {
   }
   exit(0);
 }
-if ($argv[1] === 'install') { exit(0); }
-if ($argv[1] === 'audit') { exit(0); }
-if ($argv[1] !== 'update') { fwrite(STDERR, 'Unexpected fixture operation'); exit(90); }
+if ($argv[1] === 'install') {
+  exit(0);
+}
+if ($argv[1] === 'audit') {
+  exit(0);
+}
+if ($argv[1] !== 'update') {
+  fwrite(STDERR, 'Unexpected fixture operation');
+  exit(90);
+}
 $package = $argv[2];
 if ($package === 'example/fail') {
   fwrite(STDERR, 'curl error 28: deliberate <error>network outage</error>');

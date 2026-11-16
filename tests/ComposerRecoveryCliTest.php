@@ -75,7 +75,18 @@ class ComposerRecoveryCliTest extends TestCase {
     $this->json('composer.json', $manifest);
     $this->installFixture();
     file_put_contents($this->directory . '/earlier-success.txt', 'retain earlier work');
-    foreach ([['git', 'init', '-q'], ['git', 'config', 'user.name', 'Test'], ['git', 'config', 'user.email', 'test@example.invalid'], ['git', 'config', 'commit.gpgsign', 'false'], ['git', 'add', 'composer.json', 'composer.lock', 'earlier-success.txt'], ['git', '-c', 'core.hooksPath=/dev/null', 'commit', '-qm', 'Before temporary updater installation']] as $command) {
+    $git_commands = [
+      ['git', 'init', '-q'],
+      ['git', 'config', 'user.name', 'Test'],
+      ['git', 'config', 'user.email', 'test@example.invalid'],
+      ['git', 'config', 'commit.gpgsign', 'false'],
+      ['git', 'add', 'composer.json', 'composer.lock', 'earlier-success.txt'],
+      [
+        'git', '-c', 'core.hooksPath=/dev/null',
+        'commit', '-qm', 'Before temporary updater installation',
+      ],
+    ];
+    foreach ($git_commands as $command) {
       $this->process($command);
     }
     // Neither temporary tooling nor the later successful dependency resolution
@@ -151,6 +162,9 @@ class ComposerRecoveryCliTest extends TestCase {
     self::assertNotContains('install', $this->operations());
   }
 
+  /**
+   * Tests a transient failure is recovered before the next attempt.
+   */
   public function testRetryTransientUpdateRecoversBeforeNextAttempt(): void {
     $this->retryConfiguration(3);
     $process = $this->updater('transient-once');
@@ -163,6 +177,9 @@ class ComposerRecoveryCliTest extends TestCase {
     self::assertSame(0, $this->process($this->cliArguments(['--help']))->getExitCode());
   }
 
+  /**
+   * Tests exhausted retries keep the recovered state and the last reason.
+   */
   public function testRetryExhaustionKeepsRecoveredStateAndFinalReason(): void {
     $this->retryConfiguration(3);
     $process = $this->updater('recover');
@@ -173,10 +190,15 @@ class ComposerRecoveryCliTest extends TestCase {
     self::assertStringNotContainsString('Composer attempt 3/3 failed; retrying', $this->cliOutput($process));
   }
 
+  /**
+   * Tests deterministic failures are not retried.
+   */
   public function testRetryDeterministicFailuresAreNotRepeated(): void {
     $this->retryConfiguration(3);
     foreach (['conflict', 'auth', 'unknown'] as $mode) {
-      if (is_file($this->directory . '/composer-calls.jsonl')) { unlink($this->directory . '/composer-calls.jsonl'); }
+      if (is_file($this->directory . '/composer-calls.jsonl')) {
+        unlink($this->directory . '/composer-calls.jsonl');
+      }
       $process = $this->updater($mode);
       self::assertSame(0, $process->getExitCode(), $this->cliOutput($process));
       self::assertSame(['update', 'install'], $this->mutations());
@@ -185,6 +207,9 @@ class ComposerRecoveryCliTest extends TestCase {
     $this->assertWorkingStatePreserved();
   }
 
+  /**
+   * Tests a single attempt is made when retries are disabled.
+   */
   public function testRetryDisabledPerformsOneAttempt(): void {
     $this->retryConfiguration(1);
     $process = $this->updater('transient-once');
@@ -193,6 +218,9 @@ class ComposerRecoveryCliTest extends TestCase {
     $this->assertWorkingStatePreserved();
   }
 
+  /**
+   * Tests a failed recovery stops without further attempts.
+   */
   public function testRetryRecoveryFailureStopsWithoutFurtherAttempts(): void {
     $this->retryConfiguration(3);
     $process = $this->updater('install-fails');
@@ -202,6 +230,9 @@ class ComposerRecoveryCliTest extends TestCase {
     self::assertStringNotContainsString('retrying in', $this->cliOutput($process));
   }
 
+  /**
+   * Tests Drush failures are not retried.
+   */
   public function testRetryDrushFailureIsNotRepeated(): void {
     $this->retryConfiguration(3);
     $process = $this->updater('drush-fails', 'drupal/example');
@@ -210,6 +241,9 @@ class ComposerRecoveryCliTest extends TestCase {
     self::assertSame(['update'], $this->mutations());
   }
 
+  /**
+   * Tests a transient failure listing outdated packages is retried.
+   */
   public function testRetryDiscoveryTransientFailureSucceeds(): void {
     $this->retryConfiguration(3);
     $process = $this->updater('discovery-once', NULL);
@@ -219,6 +253,9 @@ class ComposerRecoveryCliTest extends TestCase {
     self::assertStringContainsString('[resolved] run / composer show --locked --outdated --name-only', $this->cliOutput($process));
   }
 
+  /**
+   * Tests exhausted retries listing outdated packages stop before updating.
+   */
   public function testRetryDiscoveryExhaustionStopsBeforeAnyUpdate(): void {
     $this->retryConfiguration(3);
     $process = $this->updater('discovery-always', NULL);
@@ -229,19 +266,29 @@ class ComposerRecoveryCliTest extends TestCase {
     $this->assertWorkingStatePreserved();
   }
 
+  /**
+   * Tests the backoff waits one and then two seconds.
+   */
   public function testRetryBackoffWaitsOneThenTwoSeconds(): void {
     $this->retryConfiguration(3, 1);
     $process = $this->updater('transient-twice');
     self::assertSame(0, $process->getExitCode(), $this->cliOutput($process));
     self::assertStringContainsString('retrying in 1 seconds', $this->cliOutput($process));
     self::assertStringContainsString('retrying in 2 seconds', $this->cliOutput($process));
-    $events = array_map(function ($line) { return json_decode($line, TRUE); }, file($this->directory . '/retry-events.jsonl', FILE_IGNORE_NEW_LINES));
-    $updates = array_values(array_filter($events, function ($event) { return $event['operation'] === 'update'; }));
+    $events = array_map(function ($line) {
+      return json_decode($line, TRUE);
+    }, file($this->directory . '/retry-events.jsonl', FILE_IGNORE_NEW_LINES));
+    $updates = array_values(array_filter($events, function ($event) {
+      return $event['operation'] === 'update';
+    }));
     self::assertCount(3, $updates);
     self::assertGreaterThanOrEqual(1.0, $updates[1]['time'] - $updates[0]['time']);
     self::assertGreaterThanOrEqual(2.0, $updates[2]['time'] - $updates[1]['time']);
   }
 
+  /**
+   * Tests a timed out attempt can succeed on a later attempt.
+   */
   public function testRetryProcessTimeoutCanRecoverOnLaterAttempt(): void {
     $this->retryConfiguration(2);
     file_put_contents($this->directory . '/settings.yml', "composerTimeout: 1\n", FILE_APPEND);
@@ -254,11 +301,16 @@ class ComposerRecoveryCliTest extends TestCase {
     // Wait beyond the first child's delayed mutation: a surviving shell child
     // must not corrupt the state after recovery/the successful next attempt.
     $remaining = 2.2 - (microtime(TRUE) - $started);
-    if ($remaining > 0) { usleep((int) ($remaining * 1000000)); }
+    if ($remaining > 0) {
+      usleep((int) ($remaining * 1000000));
+    }
     self::assertSame($this->before['json'], file_get_contents($this->directory . '/composer.json'));
     self::assertSame($this->before['lock'], file_get_contents($this->directory . '/composer.lock'));
   }
 
+  /**
+   * Tests an additional pass retries a package with a transient failure.
+   */
   public function testAdditionalPassRecoversPendingTransientPackage(): void {
     $this->retryConfiguration(1, 0, 1);
     $process = $this->updater('transient-once');
@@ -272,6 +324,9 @@ class ComposerRecoveryCliTest extends TestCase {
     self::assertSame(0, $this->process($this->cliArguments(['--help']))->getExitCode());
   }
 
+  /**
+   * Tests the attempt and additional pass limits are both honored.
+   */
   public function testAdditionalPassAndCommandBoundsAreBothHonored(): void {
     $this->retryConfiguration(2, 0, 2);
     $process = $this->updater('recover');
@@ -285,10 +340,15 @@ class ComposerRecoveryCliTest extends TestCase {
     $this->assertWorkingStatePreserved();
   }
 
+  /**
+   * Tests additional passes skip deterministic failures.
+   */
   public function testAdditionalPassSkipsDeterministicErrors(): void {
     $this->retryConfiguration(1, 0, 1);
     foreach (['conflict', 'auth', 'unknown'] as $mode) {
-      if (is_file($this->directory . '/composer-calls.jsonl')) { unlink($this->directory . '/composer-calls.jsonl'); }
+      if (is_file($this->directory . '/composer-calls.jsonl')) {
+        unlink($this->directory . '/composer-calls.jsonl');
+      }
       $process = $this->updater($mode);
       self::assertSame(0, $process->getExitCode(), $this->cliOutput($process));
       self::assertSame(['update', 'install'], $this->mutations());
@@ -297,18 +357,28 @@ class ComposerRecoveryCliTest extends TestCase {
     $this->assertWorkingStatePreserved();
   }
 
+  /**
+   * Tests additional passes do not update successful packages again.
+   */
   public function testAdditionalPassDoesNotRepeatSuccessfulPackages(): void {
     $this->retryConfiguration(1, 0, 1);
     $process = $this->updater('transient-once', 'example/success,example/fail');
     self::assertSame(0, $process->getExitCode(), $this->cliOutput($process));
-    $calls = array_map(function ($line) { return json_decode($line, TRUE); }, file($this->directory . '/composer-calls.jsonl', FILE_IGNORE_NEW_LINES));
-    $updates = array_values(array_filter($calls, function ($call) { return $call[0] === 'update'; }));
+    $calls = array_map(function ($line) {
+      return json_decode($line, TRUE);
+    }, file($this->directory . '/composer-calls.jsonl', FILE_IGNORE_NEW_LINES));
+    $updates = array_values(array_filter($calls, function ($call) {
+      return $call[0] === 'update';
+    }));
     self::assertSame(['example/success', 'example/fail', 'example/fail'], array_column($updates, 1));
     self::assertSame('2', trim($this->process(['git', 'rev-list', '--count', 'HEAD'])->getOutput()));
     self::assertSame('retain earlier work', file_get_contents($this->directory . '/earlier-success.txt'));
     self::assertStringContainsString('[resolved] example/fail', $this->cliOutput($process));
   }
 
+  /**
+   * Tests no additional pass runs after a failed recovery.
+   */
   public function testAdditionalPassStopsOnFatalRecovery(): void {
     $this->retryConfiguration(1, 0, 1);
     $process = $this->updater('install-fails');
@@ -317,6 +387,9 @@ class ComposerRecoveryCliTest extends TestCase {
     self::assertStringNotContainsString('RETRY PASS', $this->cliOutput($process));
   }
 
+  /**
+   * Tests additional passes do not retry Drush failures.
+   */
   public function testAdditionalPassDoesNotRepeatDrushFailures(): void {
     $this->retryConfiguration(1, 0, 1);
     $process = $this->updater('drush-transient', 'example/fail,drupal/example');
@@ -326,19 +399,37 @@ class ComposerRecoveryCliTest extends TestCase {
     self::assertStringNotContainsString('RETRY PASS', $this->cliOutput($process));
   }
 
+  /**
+   * Writes the retry settings of the fixture configuration.
+   */
   private function retryConfiguration(int $attempts, int $delay = 0, int $additionalPasses = 0): void {
     file_put_contents($this->directory . '/settings.yml', "consolidateConfiguration: false\ncomposerAdditionalPasses: $additionalPasses\ncomposerAttempts: $attempts\ncomposerRetryDelay: $delay\n");
   }
 
+  /**
+   * Gets the Composer operations that change dependencies.
+   */
   private function mutations(): array {
-    return array_values(array_filter($this->operations(), function ($operation) { return in_array($operation, ['update', 'install']); }));
+    return array_values(array_filter($this->operations(), function ($operation) {
+      return in_array($operation, ['update', 'install']);
+    }));
   }
 
-  private function cliOutput(Process $process): string { return $process->getOutput() . $process->getErrorOutput(); }
+  /**
+   * Gets the standard and error output of the CLI.
+   */
+  private function cliOutput(Process $process): string {
+    return $process->getOutput() . $process->getErrorOutput();
+  }
 
+  /**
+   * Runs the updater CLI in the fixture project.
+   */
   private function updater(string $mode, ?string $packages = 'example/fail'): Process {
     $arguments = ['update', '--config=settings.yml', '--no-interaction'];
-    if ($packages !== NULL) { $arguments[] = '--packages=' . $packages; }
+    if ($packages !== NULL) {
+      $arguments[] = '--packages=' . $packages;
+    }
     $process = new Process($this->cliArguments($arguments), $this->directory, [
       'PATH' => $this->directory . '/control:' . $this->directory . '/vendor/bin:' . getenv('PATH'),
       'PWD' => $this->directory,

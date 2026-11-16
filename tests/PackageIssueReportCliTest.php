@@ -27,10 +27,25 @@ class PackageIssueReportCliTest extends TestCase {
     mkdir($this->directory . '/web');
     mkdir($this->directory . '/web/core');
     file_put_contents($this->directory . '/web/index.php', '<?php // Fixture Drupal root.');
-    $names = ['example/success', 'example/fail', 'example/constraint', 'example/noop', 'example/later', 'example/unrelated', 'drupal/example'];
-    $packages = array_map(function ($name) { return ['name' => $name, 'version' => '1.0.0']; }, $names);
-    file_put_contents($this->directory . '/composer.json', json_encode(['name' => 'example/project', 'require' => array_fill_keys($names, '^1.0')]));
-    file_put_contents($this->directory . '/composer.lock', json_encode(['packages' => $packages, 'packages-dev' => []], JSON_PRETTY_PRINT));
+    $names = [
+      'example/success',
+      'example/fail',
+      'example/constraint',
+      'example/noop',
+      'example/later',
+      'example/unrelated',
+      'drupal/example',
+    ];
+    $packages = array_map(function ($name) {
+      return ['name' => $name, 'version' => '1.0.0'];
+    }, $names);
+    $manifest = [
+      'name' => 'example/project',
+      'require' => array_fill_keys($names, '^1.0'),
+    ];
+    $lock = ['packages' => $packages, 'packages-dev' => []];
+    file_put_contents($this->directory . '/composer.json', json_encode($manifest));
+    file_put_contents($this->directory . '/composer.lock', json_encode($lock, JSON_PRETTY_PRINT));
     file_put_contents($this->directory . '/settings.yml', "consolidateConfiguration: false\ncomposerAdditionalPasses: 0\ncomposerAttempts: 1\n");
     foreach (['composer' => 'composer.php', 'composer-lock-diff' => 'lock-diff.php'] as $command => $fixture) {
       file_put_contents($this->directory . '/control/' . $command, '#!' . PHP_BINARY . "\n" . file_get_contents(__DIR__ . '/fixtures/' . $fixture));
@@ -147,7 +162,10 @@ class PackageIssueReportCliTest extends TestCase {
     $this->assertSingleAttempts(['example/success']);
   }
 
-  public function testAdditionalPassSkipsAnIssueResolvedByALaterUpdate(): void {
+  /**
+   * Tests an issue resolved by a later update is not retried.
+   */
+  public function testAdditionalPassSkipsIssueResolvedByLaterUpdate(): void {
     file_put_contents($this->directory . '/settings.yml', "consolidateConfiguration: false\ncomposerAttempts: 1\ncomposerRetryDelay: 0\ncomposerAdditionalPasses: 1\n");
     $process = $this->updater(['example/fail', 'example/later']);
     self::assertSame(0, $process->getExitCode(), $this->cliOutput($process));
@@ -156,6 +174,9 @@ class PackageIssueReportCliTest extends TestCase {
     $this->assertSingleAttempts(['example/fail', 'example/later']);
   }
 
+  /**
+   * Tests additional passes honor the limit of updated packages.
+   */
   public function testAdditionalPassHonorsTheSuccessfulPackageLimit(): void {
     file_put_contents($this->directory . '/settings.yml', "consolidateConfiguration: false\ncomposerAttempts: 1\ncomposerRetryDelay: 0\ncomposerAdditionalPasses: 1\n");
     $process = $this->updater([], 'limit-discovery', 1);
@@ -166,13 +187,28 @@ class PackageIssueReportCliTest extends TestCase {
     $this->assertSingleAttempts(['example/fail', 'example/success']);
   }
 
+  /**
+   * Runs the updater CLI for the given packages, or with a limit.
+   */
   private function updater(array $packages, string $mode = '', ?int $limit = NULL): Process {
     $source = getenv('UPDATER_TEST_SOURCE') ?: dirname(__DIR__);
     file_put_contents($this->directory . '/bootstrap.php', '<?php $loader = require ' . var_export($source . '/vendor/autoload.php', TRUE) . '; $loader->setPsr4("DrupalUpdater\\\\", ' . var_export($source . '/src', TRUE) . '); \Composer\InstalledVersions::reload(["root"=>["name"=>"example/project"],"versions"=>["drupal/core"=>["install_path"=>__DIR__."/web/core"]]]);');
     $selection = $limit === NULL ? '--packages=' . implode(',', $packages) : '--limit=' . $limit;
-    $process = new Process([PHP_BINARY, '-d', 'auto_prepend_file=' . $this->directory . '/bootstrap.php', $source . '/drupal-updater', 'update', '--config=settings.yml', $selection, '--no-interaction'], $this->directory, [
-      'PATH' => $this->directory . '/control:' . getenv('PATH'), 'PWD' => $this->directory,
-      'REPORT_TEST_MODE' => $mode, 'REPORT_REAL_DIFF' => dirname(__DIR__) . '/vendor/bin/composer-lock-diff',
+    $arguments = [
+      PHP_BINARY,
+      '-d',
+      'auto_prepend_file=' . $this->directory . '/bootstrap.php',
+      $source . '/drupal-updater',
+      'update',
+      '--config=settings.yml',
+      $selection,
+      '--no-interaction',
+    ];
+    $process = new Process($arguments, $this->directory, [
+      'PATH' => $this->directory . '/control:' . getenv('PATH'),
+      'PWD' => $this->directory,
+      'REPORT_TEST_MODE' => $mode,
+      'REPORT_REAL_DIFF' => dirname(__DIR__) . '/vendor/bin/composer-lock-diff',
     ]);
     $process->setTimeout(20);
     $process->run();

@@ -17,11 +17,14 @@ if ($argv[1] === 'update') {
   }
   $count = is_file('update-attempts') ? (int) file_get_contents('update-attempts') : 0;
   file_put_contents('update-attempts', (string) ++$count);
-  if ($mode === 'timeout-once' && $count === 1) { usleep(2000000); }
+  if ($mode === 'timeout-once' && $count === 1) {
+    usleep(2000000);
+  }
   if (($mode === 'transient-once' && $count > 1) || ($mode === 'transient-twice' && $count > 2) || ($mode === 'timeout-once' && $count > 1)) {
     $root = json_decode(file_get_contents('composer.json'), TRUE);
     if (!isset($root['require']['metadrop/drupal-updater']) || !is_file('vendor/bin/composer-lock-diff')) {
-      fwrite(STDERR, 'Pre-attempt working state and tools were not restored'); exit(92);
+      fwrite(STDERR, 'Pre-attempt working state and tools were not restored');
+      exit(92);
     }
     exit(0);
   }
@@ -47,13 +50,18 @@ if ($argv[1] === 'show') {
   if (in_array('--name-only', $argv) && strpos($mode, 'discovery-') === 0) {
     $count = is_file('discovery-attempts') ? (int) file_get_contents('discovery-attempts') : 0;
     file_put_contents('discovery-attempts', (string) ++$count);
-    if ($count === 1 || $mode === 'discovery-always') { fwrite(STDERR, 'HTTP/2 503 temporary failure'); exit(1); }
+    if ($count === 1 || $mode === 'discovery-always') {
+      fwrite(STDERR, 'HTTP/2 503 temporary failure');
+      exit(1);
+    }
     exit(0);
   }
   echo in_array('--outdated', $argv) ? '{"locked":[]}' : (strpos($argv[2], 'drupal/') === 0 ? "type : drupal-module\n" : "type : library\n");
   exit(0);
 }
-if ($argv[1] === 'audit') { exit(0); }
+if ($argv[1] === 'audit') {
+  exit(0);
+}
 if ($argv[1] !== 'install') {
   fwrite(STDERR, 'Unexpected fixture operation: ' . $argv[1]);
   exit(90);
