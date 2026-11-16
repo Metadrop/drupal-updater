@@ -56,7 +56,11 @@ class UpdaterCommand extends Command {
    */
   protected bool $showFullReport = TRUE;
 
-  /** Package issues retained for the final report, including later resolutions. */
+  /**
+   * Package issues retained for the final report, including later resolutions.
+   *
+   * @var array<int, array<string, mixed>>
+   */
   protected array $packageIssues = [];
 
   /**
@@ -217,7 +221,9 @@ Update includes:
     }
   }
 
-  /** Run the existing update workflow while retaining issues on early exit. */
+  /**
+   * Run the existing update workflow while retaining issues on early exit.
+   */
   protected function runUpdates(): int {
     $this->runCommand('cp composer.lock composer.drupalupdater.lock');
     $this->printSummary();
@@ -986,6 +992,9 @@ Update includes:
     $this->runCommand('git checkout composer.json composer.lock');
   }
 
+  /**
+   * Gets the error output of a failed package update, or its message.
+   */
   protected function packageErrorReason(\Exception $e): string {
     $reason = $e instanceof ProcessFailedException ? trim($e->getProcess()->getErrorOutput()) : $e->getMessage();
     return $reason !== '' ? $reason : $e->getMessage();
@@ -1055,14 +1064,37 @@ Update includes:
     return min(300, $this->config->getComposerRetryDelay() * (2 ** ($failedAttempt - 1)));
   }
 
+  /**
+   * Records a package update issue for the final report.
+   *
+   * @param string $package
+   *   Package name.
+   * @param string $operation
+   *   Failed operation, such as composer-update or drush-update.
+   * @param string $kind
+   *   Issue kind: execution or constraint.
+   * @param string $reason
+   *   Failure reason.
+   * @param array<int, string|null>|null $before
+   *   Locked version and references of the package before the update.
+   */
   protected function recordPackageIssue(string $package, string $operation, string $kind, string $reason, ?array $before): void {
     $this->packageIssues[] = [
-      'package' => $package, 'operation' => $operation, 'kind' => $kind,
-      'reason' => $reason, 'before' => $before, 'resolved' => FALSE,
+      'package' => $package,
+      'operation' => $operation,
+      'kind' => $kind,
+      'reason' => $reason,
+      'before' => $before,
+      'resolved' => FALSE,
     ];
   }
 
-  /** Best-effort fingerprints for reporting; do not interrupt update recovery. */
+  /**
+   * Best-effort fingerprints for reporting; do not interrupt update recovery.
+   *
+   * @return array<string, array<int, string|null>>
+   *   Version and source and dist references, keyed by package name.
+   */
   protected function lockedPackageVersions(): array {
     $lock = json_decode(@file_get_contents('composer.lock') ?: '', TRUE);
     $versions = [];
@@ -1073,12 +1105,21 @@ Update includes:
       if (!is_array($package) || !isset($package['name'], $package['version']) || !is_string($package['name']) || !is_string($package['version'])) {
         continue;
       }
-      $versions[$package['name']] = [$package['version'], $package['source']['reference'] ?? NULL, $package['dist']['reference'] ?? NULL];
+      $versions[$package['name']] = [
+        $package['version'],
+        $package['source']['reference'] ?? NULL,
+        $package['dist']['reference'] ?? NULL,
+      ];
     }
     return $versions;
   }
 
-  /** Resolve only Composer issues for packages changed by a successful update. */
+  /**
+   * Resolve only Composer issues for packages changed by a successful update.
+   *
+   * @param array<string, mixed> $diff
+   *   Composer lock diff of the successful update.
+   */
   protected function resolvePackageIssues(array $diff): void {
     $after = $this->lockedPackageVersions();
     foreach ($this->packageIssues as &$issue) {
@@ -1091,6 +1132,9 @@ Update includes:
     unset($issue);
   }
 
+  /**
+   * Prints the package update issues collected during the run.
+   */
   protected function showPackageIssues(): void {
     if (empty($this->packageIssues)) {
       return;

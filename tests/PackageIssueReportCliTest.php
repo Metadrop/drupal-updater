@@ -5,10 +5,21 @@ namespace DrupalUpdater\Tests;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\Process\Process;
 
-/** Actual CLI/Git/lock-diff with controlled Composer and Drush outcomes. */
+/**
+ * Actual CLI/Git/lock-diff with controlled Composer and Drush outcomes.
+ */
 class PackageIssueReportCliTest extends TestCase {
+
+  /**
+   * Fixture project directory.
+   *
+   * @var string
+   */
   private string $directory;
 
+  /**
+   * Builds a fixture project with controlled Composer, lock-diff and Drush.
+   */
   protected function setUp(): void {
     $this->directory = sys_get_temp_dir() . '/updater-report-' . bin2hex(random_bytes(8));
     mkdir($this->directory);
@@ -27,11 +38,22 @@ class PackageIssueReportCliTest extends TestCase {
     }
     file_put_contents($this->directory . '/control/drush', '#!' . PHP_BINARY . "\n<?php if (getenv('REPORT_TEST_MODE') === 'limit-discovery') { echo '[]'; exit(0); } file_put_contents('drush-calls', implode(' ', array_slice(\$argv, 1)).\"\\n\", FILE_APPEND); fwrite(STDERR, 'deliberate Drupal failure'); exit(1);\n");
     chmod($this->directory . '/control/drush', 0755);
-    foreach ([['git', 'init', '-q'], ['git', 'config', 'user.name', 'Test'], ['git', 'config', 'user.email', 'test@example.invalid'], ['git', 'config', 'commit.gpgsign', 'false'], ['git', 'add', 'composer.json', 'composer.lock', 'web'], ['git', '-c', 'core.hooksPath=/dev/null', 'commit', '-qm', 'Baseline']] as $arguments) {
+    $git_commands = [
+      ['git', 'init', '-q'],
+      ['git', 'config', 'user.name', 'Test'],
+      ['git', 'config', 'user.email', 'test@example.invalid'],
+      ['git', 'config', 'commit.gpgsign', 'false'],
+      ['git', 'add', 'composer.json', 'composer.lock', 'web'],
+      ['git', '-c', 'core.hooksPath=/dev/null', 'commit', '-qm', 'Baseline'],
+    ];
+    foreach ($git_commands as $arguments) {
       (new Process($arguments, $this->directory))->mustRun();
     }
   }
 
+  /**
+   * Tests failures of several kinds are collected in the final report.
+   */
   public function testMixedOutcomesAreCollectedAtTheEnd(): void {
     $process = $this->updater(['example/success', 'example/fail', 'example/constraint', 'example/noop']);
     self::assertSame(0, $process->getExitCode(), $this->cliOutput($process));
@@ -47,6 +69,9 @@ class PackageIssueReportCliTest extends TestCase {
     $this->assertSingleAttempts(['example/success', 'example/fail', 'example/constraint', 'example/noop']);
   }
 
+  /**
+   * Tests a later update changing the failed packages resolves their issues.
+   */
   public function testLaterSuccessfulDependencyUpdateResolvesEarlierIssues(): void {
     $process = $this->updater(['example/fail', 'example/constraint', 'example/later']);
     self::assertSame(0, $process->getExitCode(), $this->cliOutput($process));
@@ -60,6 +85,9 @@ class PackageIssueReportCliTest extends TestCase {
     $this->assertSingleAttempts(['example/fail', 'example/constraint', 'example/later']);
   }
 
+  /**
+   * Tests an unrelated successful update does not resolve an earlier failure.
+   */
   public function testUnrelatedSuccessDoesNotResolveAnEarlierFailure(): void {
     $process = $this->updater(['example/fail', 'example/unrelated']);
     self::assertSame(0, $process->getExitCode(), $this->cliOutput($process));
@@ -70,7 +98,10 @@ class PackageIssueReportCliTest extends TestCase {
     $this->assertSingleAttempts(['example/fail', 'example/unrelated']);
   }
 
-  public function testStaleOutdatedCacheDoesNotReopenAResolvedConstraint(): void {
+  /**
+   * Tests a stale outdated list does not reopen a resolved constraint.
+   */
+  public function testStaleOutdatedCacheDoesNotReopenResolvedConstraint(): void {
     $process = $this->updater(['example/noop', 'example/later', 'example/noop'], 'resolve-noop');
     self::assertSame(0, $process->getExitCode(), $this->cliOutput($process));
     $report = $this->report($process);
@@ -81,7 +112,10 @@ class PackageIssueReportCliTest extends TestCase {
     $this->assertSingleAttempts(['example/noop', 'example/later', 'example/noop']);
   }
 
-  public function testRecordedReasonsSurviveAFatalFinalReportError(): void {
+  /**
+   * Tests recorded issues are printed even when the final report fails.
+   */
+  public function testRecordedReasonsSurviveFatalFinalReportError(): void {
     $process = $this->updater(['example/fail'], 'fatal-report');
     self::assertNotSame(0, $process->getExitCode());
     self::assertStringContainsString('deliberate final report failure', $this->cliOutput($process));
@@ -89,6 +123,9 @@ class PackageIssueReportCliTest extends TestCase {
     $this->assertSingleAttempts(['example/fail']);
   }
 
+  /**
+   * Tests Drush failures are reported without changing the exit code.
+   */
   public function testDrushFailureIsReportedWithoutChangingItsExitPolicy(): void {
     $process = $this->updater(['drupal/example']);
     self::assertSame(0, $process->getExitCode(), $this->cliOutput($process));
@@ -99,6 +136,9 @@ class PackageIssueReportCliTest extends TestCase {
     $this->assertSingleAttempts(['drupal/example']);
   }
 
+  /**
+   * Tests a successful run prints no issue report.
+   */
   public function testSuccessfulRunDoesNotPrintAnEmptyIssueReport(): void {
     $process = $this->updater(['example/success']);
     self::assertSame(0, $process->getExitCode(), $this->cliOutput($process));
@@ -139,6 +179,9 @@ class PackageIssueReportCliTest extends TestCase {
     return $process;
   }
 
+  /**
+   * Gets the package update issues report from the CLI output.
+   */
   private function report(Process $process): string {
     $output = $this->cliOutput($process);
     $position = strpos($output, '// PACKAGE UPDATE ISSUES //');
@@ -146,28 +189,60 @@ class PackageIssueReportCliTest extends TestCase {
     return substr($output, $position);
   }
 
-  private function cliOutput(Process $process): string { return $process->getOutput() . $process->getErrorOutput(); }
+  /**
+   * Gets the standard and error output of the CLI.
+   */
+  private function cliOutput(Process $process): string {
+    return $process->getOutput() . $process->getErrorOutput();
+  }
 
+  /**
+   * Gets the locked version of a fixture package.
+   */
   private function version(string $name): string {
     foreach (json_decode(file_get_contents($this->directory . '/composer.lock'), TRUE)['packages'] as $package) {
-      if ($package['name'] === $name) { return $package['version']; }
+      if ($package['name'] === $name) {
+        return $package['version'];
+      }
     }
     throw new \RuntimeException('Missing fixture package: ' . $name);
   }
 
+  /**
+   * Asserts each package was updated once, in the given order.
+   */
   private function assertSingleAttempts(array $expected): void {
-    $calls = array_map(function ($line) { return json_decode($line, TRUE); }, file($this->directory . '/composer-calls.jsonl', FILE_IGNORE_NEW_LINES));
-    $updates = array_filter($calls, function ($call) { return $call[0] === 'update'; });
-    self::assertSame($expected, array_values(array_map(function ($call) { return $call[1]; }, $updates)));
+    $calls = array_map(function ($line) {
+      return json_decode($line, TRUE);
+    }, file($this->directory . '/composer-calls.jsonl', FILE_IGNORE_NEW_LINES));
+    $updates = array_filter($calls, function ($call) {
+      return $call[0] === 'update';
+    });
+    self::assertSame($expected, array_values(array_map(function ($call) {
+      return $call[1];
+    }, $updates)));
   }
 
-  protected function tearDown(): void { $this->remove($this->directory); }
+  /**
+   * Removes the fixture project.
+   */
+  protected function tearDown(): void {
+    $this->remove($this->directory);
+  }
 
+  /**
+   * Removes a file or directory recursively.
+   */
   private function remove(string $path): void {
     if (is_dir($path) && !is_link($path)) {
-      foreach (new \FilesystemIterator($path) as $file) { $this->remove($file->getPathname()); }
+      foreach (new \FilesystemIterator($path) as $file) {
+        $this->remove($file->getPathname());
+      }
       rmdir($path);
     }
-    else { unlink($path); }
+    else {
+      unlink($path);
+    }
   }
+
 }
