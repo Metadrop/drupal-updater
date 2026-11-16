@@ -10,6 +10,62 @@ use Symfony\Component\Yaml\Yaml;
 class Config implements ConfigInterface {
 
   /**
+   * Composer process timeout, in seconds.
+   *
+   * @var int
+   */
+  protected int $composerTimeout = 300;
+
+  /**
+   * Total Composer attempts, including the first.
+   *
+   * @var int
+   */
+  protected int $composerAttempts = 3;
+
+  /**
+   * Initial retry backoff delay, in seconds.
+   *
+   * @var int
+   */
+  protected int $composerRetryDelay = 10;
+
+  /**
+   * Additional passes over transient Composer package failures.
+   *
+   * @var int
+   */
+  protected int $composerAdditionalPasses = 1;
+
+  /**
+   * {@inheritdoc}
+   */
+  public function getComposerAttempts(): int {
+    return $this->composerAttempts;
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function getComposerRetryDelay(): int {
+    return $this->composerRetryDelay;
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function getComposerAdditionalPasses(): int {
+    return $this->composerAdditionalPasses;
+  }
+
+  /**
+   * {@inheritdoc}
+   */
+  public function getComposerTimeout(): int {
+    return $this->composerTimeout;
+  }
+
+  /**
    * Commits author.
    *
    * @var string
@@ -175,6 +231,23 @@ class Config implements ConfigInterface {
 
     $instance = new self();
     $configuration = Yaml::parseFile($config_file);
+
+    foreach (['composerAttempts' => [1, 10], 'composerRetryDelay' => [0, 300], 'composerAdditionalPasses' => [0, 3]] as $key => $bounds) {
+      if (array_key_exists($key, $configuration ?? [])) {
+        $value = $configuration[$key];
+        if (!is_int($value) || $value < $bounds[0] || $value > $bounds[1]) {
+          throw new \InvalidArgumentException(sprintf('"%s" must be an integer between %d and %d.', $key, $bounds[0], $bounds[1]));
+        }
+        $instance->{$key} = $value;
+      }
+    }
+
+    if (array_key_exists('composerTimeout', $configuration ?? [])) {
+      if (!is_int($configuration['composerTimeout']) || $configuration['composerTimeout'] < 1) {
+        throw new \InvalidArgumentException('"composerTimeout" must be a positive integer in seconds.');
+      }
+      $instance->composerTimeout = $configuration['composerTimeout'];
+    }
 
     $string_fields = [
       'author',

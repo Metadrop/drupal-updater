@@ -11,6 +11,7 @@ use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Process\Exception\ProcessFailedException;
+use Symfony\Component\Process\Exception\ProcessTimedOutException;
 use Symfony\Component\Process\Process;
 use Symfony\Component\Console\Helper\Table;
 use Symfony\Component\Console\Helper\TableSeparator;
@@ -19,6 +20,7 @@ use Symfony\Component\Console\Helper\TableSeparator;
  * Updates drupal modules and packages.
  */
 class UpdaterCommand extends Command {
+
   /**
    * Prints the output of the command.
    *
@@ -53,6 +55,13 @@ class UpdaterCommand extends Command {
    * @var bool
    */
   protected bool $showFullReport = TRUE;
+
+  /**
+   * Package issues retained for the final report, including later resolutions.
+   *
+   * @var array<array<string, mixed>>
+   */
+  protected array $packageIssues = [];
 
   /**
    * Total number of direct packages successfully updated.
@@ -203,6 +212,19 @@ Update includes:
    * {@inheritdoc}
    */
   protected function execute(InputInterface $input, OutputInterface $output) : int {
+    $this->packageIssues = [];
+    try {
+      return $this->runUpdates();
+    }
+    finally {
+      $this->showPackageIssues();
+    }
+  }
+
+  /**
+   * Run the existing update workflow while retaining issues on early exit.
+   */
+  protected function runUpdates(): int {
     $this->runCommand('cp composer.lock composer.drupalupdater.lock');
     $this->printSummary();
     $this->printHeader1('1. Consolidating configuration');
@@ -314,8 +336,51 @@ Update includes:
    *   When the command fails.
    */
   protected function runCommand(string $command) {
-    $process = Process::fromShellCommandline($command);
-    $process->setTimeout(300);
+    // Retry only standalone read-only Composer commands here. Package updates
+    // use the recovery-aware path below; installs/Drush/Git are never retried.
+    if (preg_match('/^\s*(?:timeout\s+\S+\s+)?composer\s+(?:show|audit|why|outdated)\b/', $command) && strpos($command, '|') === FALSE) {
+      $process = $this->retryComposerCommand($command, function () use ($command) {
+        return $this->runProcess($command);
+      });
+      // Without a recovery callback the last failure is thrown, never NULL.
+      if ($process === NULL) {
+        throw new \LogicException(sprintf('No process returned for "%s".', $command));
+      }
+      return $process;
+    }
+    return $this->runProcess($command);
+  }
+
+  /**
+   * Runs a shell command once, with the Composer timeout for Composer.
+   *
+   * @param string $command
+   *   Command.
+   *
+   * @return \Symfony\Component\Process\Process
+   *   The finished process.
+   *
+   * @throws \RuntimeException
+   *   When the command fails.
+   */
+  protected function runProcess(string $command): Process {
+    // On POSIX, replace the wrapper shell for standalone Composer invocations
+    // so a timeout signals Composer itself before recovery starts.
+    $launch = $command;
+    if (DIRECTORY_SEPARATOR !== '\\' && preg_match('/^\s*composer\s+/', $command) && !preg_match('/[|;&<>]/', $command)) {
+      $launch = 'exec ' . $command;
+    }
+    $process = Process::fromShellCommandline($launch);
+    // Match Composer itself, including an explicit shell timeout wrapper, but
+    // not other executables such as composer-lock-diff.
+    if (preg_match('/^\s*(?:timeout\s+\S+\s+)?composer\s/', $command)) {
+      $timeout = $this->getConfiguration()->getComposerTimeout();
+      $process->setTimeout($timeout);
+      $process->setEnv(['COMPOSER_PROCESS_TIMEOUT' => (string) $timeout]);
+    }
+    else {
+      $process->setTimeout(300);
+    }
     $process->run();
     if (!$process->isSuccessful()) {
       throw new \RuntimeException(sprintf('Error running "%s" command: %s', $command, $process->getErrorOutput()));
@@ -415,7 +480,7 @@ Update includes:
     }
     else {
       $package_list = $this
-        ->runCommand(sprintf('composer show --locked --outdated --name-only %s 2>/dev/null', $this->getNoDevParameter()))
+        ->runCommand(sprintf('composer show --locked --outdated --name-only %s', $this->getNoDevParameter()))
         ->getOutput();
     }
     $package_list_massaged = $this->massagePackageList($package_list);
@@ -452,7 +517,7 @@ Update includes:
     }
 
     $direct_packages = $this->massagePackageList($this
-      ->runCommand(sprintf('composer show --locked --direct --name-only %s 2>/dev/null', $this->getNoDevParameter()))
+      ->runCommand(sprintf('composer show --locked --direct --name-only %s', $this->getNoDevParameter()))
       ->getOutput());
 
     $direct_packages_found = array_intersect($packages_list, $direct_packages);
@@ -559,15 +624,54 @@ Update includes:
    */
   protected function updatePackages(array $package_list): void {
     $limit = $this->getEffectiveLimit();
-    foreach ($package_list as $package) {
-      if (!empty($limit) && $this->updatedPackages >= $limit) {
-        $this->output->writeln(sprintf("Reached limit of %d direct packages, finishing...", $limit));
-        $this->output->writeln('');
+    $queue = $package_list;
+    for ($pass = 0; $pass <= $this->config->getComposerAdditionalPasses(); $pass++) {
+      if (empty($queue)) {
         break;
       }
-
-      $this->updatePackage($package);
+      if ($pass > 0) {
+        if (!empty($limit) && $this->updatedPackages >= $limit) {
+          break;
+        }
+        $this->outdatedPackages = [];
+        $this->printHeader1(sprintf('Retry pass %d/%d for unresolved Composer package failures', $pass, $this->config->getComposerAdditionalPasses()));
+      }
+      foreach ($queue as $package) {
+        if (!empty($limit) && $this->updatedPackages >= $limit) {
+          $this->output->writeln(sprintf("Reached limit of %d direct packages, finishing...", $limit));
+          $this->output->writeln('');
+          return;
+        }
+        // A successful update earlier in this pass may have resolved another
+        // queued package as a dependency. Never run it again unnecessarily.
+        if ($pass > 0 && !in_array($package, $this->retryablePackages(), TRUE)) {
+          continue;
+        }
+        $this->updatePackage($package);
+      }
+      $queue = $this->retryablePackages();
     }
+  }
+
+  /**
+   * Gets the packages whose Composer update failed with a transient error.
+   *
+   * @return string[]
+   *   Package names.
+   */
+  protected function retryablePackages(): array {
+    $packages = [];
+    foreach ($this->packageIssues as $issue) {
+      // Do not add more work after a Drupal operation may have partially run.
+      // The existing initial-pass/exit behavior is otherwise unchanged.
+      if (!$issue['resolved'] && $issue['operation'] === 'drush-update') {
+        return [];
+      }
+      if (!$issue['resolved'] && $issue['operation'] === 'composer-update' && ($issue['retryable'] ?? FALSE)) {
+        $packages[] = $issue['package'];
+      }
+    }
+    return array_values(array_unique($packages));
   }
 
   /**
@@ -635,11 +739,25 @@ Update includes:
    */
   protected function updatePackage(string $package): void {
     $this->printHeader2(sprintf('Updating: %s', $package));
-    try {
-      $result = $this->runComposer('update', [$package, '--with-dependencies']);
+    $state = new ComposerState();
+    $required_tools = [];
+    foreach (['vendor/bin/drupal-updater', 'vendor/bin/composer-lock-diff'] as $tool) {
+      if (is_file($tool)) {
+        $required_tools[] = $tool;
+      }
     }
-    catch (\Exception $e) {
-      $this->handlePackageUpdateErrors($e);
+    $before = $this->lockedPackageVersions();
+    $result = $this->retryComposerCommand(
+      'composer update ' . $package . ' --with-dependencies',
+      function () use ($package) {
+        return $this->runComposer('update', [$package, '--with-dependencies']);
+      },
+      function (\Exception $e) use ($state, $required_tools) {
+        $this->handleComposerUpdateErrors($e, $state, $required_tools);
+      },
+      $package, $before[$package] ?? NULL
+    );
+    if ($result === NULL) {
       return;
     }
 
@@ -648,6 +766,11 @@ Update includes:
     $available_update = $this->getAvailableUpdate($package);
     if (!empty($available_update) && !empty($available_update->latest) && !$composer_lock_is_changed) {
       $this->output->writeln(sprintf("Package %s has an update available to %s version. Due to composer.json constraints, it hasn't been updated.\n", $package, $available_update->latest));
+      // The cached outdated list may describe a version changed earlier in
+      // the run. Do not add a constraint if the locked package is now current.
+      if (($before[$package][0] ?? NULL) !== $available_update->latest) {
+        $this->recordPackageIssue($package, 'composer-update', 'constraint', 'No compatible change was produced by Composer; available version: ' . $available_update->latest, $before[$package] ?? NULL);
+      }
 
       $error_output = trim($result->getOutput());
       $valid_errors = [
@@ -684,6 +807,7 @@ Update includes:
         }
       }
       catch (\Exception $e) {
+        $this->recordPackageIssue($package, 'drush-update', 'execution', $this->packageErrorReason($e), $before[$package] ?? NULL);
         $this->handlePackageUpdateErrors($e);
         return;
       }
@@ -705,6 +829,7 @@ Update includes:
 
     $this->runCommand(sprintf('git commit -m "%s" -m "%s" --author="%s" -n', $commit_message, $updated_packages, $this->getConfiguration()->getAuthor()));
     $this->updatedPackages++;
+    $this->resolvePackageIssues($composerLockDiff);
 
   }
 
@@ -853,13 +978,45 @@ Update includes:
   }
 
   /**
-   * Handle errors produced in a update.
-   *
-   * There are errors either in composer update or drush updb, in those
-   * case all the possible changes are reverted and the error message is shown.
+   * Restore dependencies after a failed Composer update.
    *
    * @param \Exception $e
-   *   Exception.
+   *   Original update failure.
+   * @param \DrupalUpdater\ComposerState $state
+   *   Working Composer files immediately before the update.
+   * @param string[] $required_tools
+   *   Updater executables present before the update.
+   *
+   * @throws \RuntimeException
+   *   If recovery cannot restore consistent dependencies and required tools.
+   */
+  protected function handleComposerUpdateErrors(\Exception $e, ComposerState $state, array $required_tools): void {
+    $this->output->writeln("\n!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
+    $error_ouput = $e instanceof ProcessFailedException ? $e->getProcess()->getErrorOutput() : $e->getMessage();
+    $this->output->writeln($error_ouput);
+    $this->output->writeln('Updating package FAILED: recovering previous state.');
+    $this->output->writeln('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!');
+    try {
+      $state->restore();
+      // Restore installed dependencies without repeating project scripts or
+      // database operations. Composer plugins may still execute.
+      $this->runComposer('install', ['--no-interaction', '--no-progress', '--no-scripts']);
+      foreach ($required_tools as $tool) {
+        if (!is_file($tool)) {
+          throw new \RuntimeException('Required updater executable missing: ' . $tool);
+        }
+      }
+    }
+    catch (\Exception $recovery_error) {
+      throw new \RuntimeException('Composer recovery failed; stopping to avoid inconsistent dependencies: ' . $recovery_error->getMessage(), 0, $recovery_error);
+    }
+  }
+
+  /**
+   * Preserve the existing error handler for the separate Drush update path.
+   *
+   * @param \Exception $e
+   *   Update failure.
    */
   protected function handlePackageUpdateErrors(\Exception $e): void {
     $this->output->writeln("\n!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
@@ -868,6 +1025,194 @@ Update includes:
     $this->output->writeln('Updating package FAILED: recovering previous state.');
     $this->output->writeln('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!');
     $this->runCommand('git checkout composer.json composer.lock');
+  }
+
+  /**
+   * Gets the error output of a failed package update, or its message.
+   */
+  protected function packageErrorReason(\Exception $e): string {
+    $reason = $e instanceof ProcessFailedException ? trim($e->getProcess()->getErrorOutput()) : $e->getMessage();
+    return $reason !== '' ? $reason : $e->getMessage();
+  }
+
+  /**
+   * Retry eligible Composer failures, recovering mutations before each retry.
+   *
+   * @param string $command
+   *   Command shown in the retry messages and the report.
+   * @param callable $execute
+   *   Runs one attempt and returns its process.
+   * @param callable|null $recover
+   *   Restores the state after a failed package update, NULL for read-only
+   *   commands.
+   * @param string $package
+   *   Package being updated, or 'run' for read-only commands.
+   * @param array<int, string|null>|null $before
+   *   Locked version and references of the package before the update.
+   *
+   * @return \Symfony\Component\Process\Process|null
+   *   The successful process, or NULL when a package update gives up.
+   *
+   * @throws \Exception
+   *   The last failure of a read-only command.
+   */
+  protected function retryComposerCommand(string $command, callable $execute, ?callable $recover = NULL, string $package = 'run', ?array $before = NULL): ?Process {
+    $issue = NULL;
+    $reasons = [];
+    $previousAttempts = 0;
+    if ($recover !== NULL) {
+      foreach ($this->packageIssues as $index => $previous) {
+        if (!$previous['resolved'] && $previous['operation'] === 'composer-update' && $previous['package'] === $package && $previous['kind'] === 'execution') {
+          $issue = $index;
+          $previousAttempts = $previous['attempts'] ?? 1;
+          $reasons = $previous['attemptReasons'] ?? [$previous['reason']];
+          break;
+        }
+      }
+    }
+    for ($attempt = 1;; $attempt++) {
+      try {
+        $result = $execute();
+        if ($issue !== NULL) {
+          $this->packageIssues[$issue]['resolved'] = TRUE;
+          $this->packageIssues[$issue]['attempts'] = $previousAttempts + $attempt;
+          $this->packageIssues[$issue]['resolution'] = $previousAttempts > 0 ? 'Composer command succeeded on a later package pass.' : 'Composer command succeeded after retry.';
+        }
+        return $result;
+      }
+      catch (\Exception $e) {
+        $reasons[] = $this->packageErrorReason($e);
+        $kind = preg_match('/Your requirements could not be resolved to an installable set of packages|conflicts with your root composer.json require/i', end($reasons)) ? 'constraint' : 'execution';
+        if ($issue === NULL) {
+          $this->recordPackageIssue($package, $recover === NULL ? $command : 'composer-update', $kind, end($reasons), $before);
+          $issue = array_key_last($this->packageIssues);
+        }
+        $this->packageIssues[$issue]['kind'] = $kind;
+        $this->packageIssues[$issue]['attemptReasons'] = array_values(array_unique($reasons));
+        $this->packageIssues[$issue]['reason'] = implode("\n", $this->packageIssues[$issue]['attemptReasons']);
+        $this->packageIssues[$issue]['attempts'] = $previousAttempts + $attempt;
+        $this->packageIssues[$issue]['retryable'] = $recover !== NULL && $this->isTransientComposerFailure($e);
+        // Recovery is single-attempt and fatal on failure; never catch it as
+        // another eligible update failure or continue with damaged tooling.
+        if ($recover !== NULL) {
+          $recover($e);
+        }
+        if ($attempt >= $this->config->getComposerAttempts() || !$this->isTransientComposerFailure($e)) {
+          if ($recover === NULL) {
+            throw $e;
+          }
+          return NULL;
+        }
+        $delay = $this->composerRetryDelay($attempt);
+        $this->output->writeln(sprintf('Composer attempt %d/%d failed; retrying in %d seconds: %s', $attempt, $this->config->getComposerAttempts(), $delay, $command));
+        sleep($delay);
+      }
+    }
+  }
+
+  /**
+   * Checks whether a Composer failure is transient and worth retrying.
+   */
+  protected function isTransientComposerFailure(\Exception $e): bool {
+    if ($e instanceof ProcessTimedOutException) {
+      return TRUE;
+    }
+    $text = $e->getMessage();
+    if (preg_match('/could not be resolved|conflicts with|authentication|bad credentials|\b(?:401|403|404)\b|permission denied|invalid configuration/i', $text)) {
+      return FALSE;
+    }
+    return (bool) preg_match('/curl error (?:6|7|18|28|35|52|56)\b|connection (?:reset|timed out)|temporary failure|could not resolve host|HTTP[^\n]*(?:429|500|502|503|504)\b/i', $text);
+  }
+
+  /**
+   * Gets the backoff delay after a failed attempt, up to 300 seconds.
+   */
+  protected function composerRetryDelay(int $failedAttempt): int {
+    return min(300, $this->config->getComposerRetryDelay() * (2 ** ($failedAttempt - 1)));
+  }
+
+  /**
+   * Records a package update issue for the final report.
+   *
+   * @param string $package
+   *   Package name.
+   * @param string $operation
+   *   Failed operation, such as composer-update or drush-update.
+   * @param string $kind
+   *   Issue kind: execution or constraint.
+   * @param string $reason
+   *   Failure reason.
+   * @param array<int, string|null>|null $before
+   *   Locked version and references of the package before the update.
+   */
+  protected function recordPackageIssue(string $package, string $operation, string $kind, string $reason, ?array $before): void {
+    $this->packageIssues[] = [
+      'package' => $package,
+      'operation' => $operation,
+      'kind' => $kind,
+      'reason' => $reason,
+      'before' => $before,
+      'resolved' => FALSE,
+    ];
+  }
+
+  /**
+   * Best-effort fingerprints for reporting; do not interrupt update recovery.
+   *
+   * @return array<string, array<int, string|null>>
+   *   Version and source and dist references, keyed by package name.
+   */
+  protected function lockedPackageVersions(): array {
+    $lock = json_decode(@file_get_contents('composer.lock') ?: '', TRUE);
+    $versions = [];
+    if (!is_array($lock)) {
+      return $versions;
+    }
+    foreach (array_merge((array) ($lock['packages'] ?? []), (array) ($lock['packages-dev'] ?? [])) as $package) {
+      if (!is_array($package) || !isset($package['name'], $package['version']) || !is_string($package['name']) || !is_string($package['version'])) {
+        continue;
+      }
+      $versions[$package['name']] = [
+        $package['version'],
+        $package['source']['reference'] ?? NULL,
+        $package['dist']['reference'] ?? NULL,
+      ];
+    }
+    return $versions;
+  }
+
+  /**
+   * Resolve only Composer issues for packages changed by a successful update.
+   *
+   * @param array<string, mixed> $diff
+   *   Composer lock diff of the successful update.
+   */
+  protected function resolvePackageIssues(array $diff): void {
+    $after = $this->lockedPackageVersions();
+    foreach ($this->packageIssues as &$issue) {
+      $package = $issue['package'];
+      if (!$issue['resolved'] && $issue['operation'] === 'composer-update' &&
+          $this->isPackageUpdated($package, $diff) && isset($after[$package]) && $after[$package] !== $issue['before']) {
+        $issue['resolved'] = TRUE;
+      }
+    }
+    unset($issue);
+  }
+
+  /**
+   * Prints the package update issues collected during the run.
+   */
+  protected function showPackageIssues(): void {
+    if (empty($this->packageIssues)) {
+      return;
+    }
+    $this->printHeader1('Package update issues');
+    foreach ($this->packageIssues as $issue) {
+      $status = $issue['resolved'] ? 'resolved' : $issue['kind'];
+      $resolution = $issue['resolved'] ? ' (' . ($issue['resolution'] ?? 'Resolved by a later successful package update.') . ')' : '';
+      $attempts = ($issue['attempts'] ?? 1) > 1 ? sprintf(' (%d attempts)', $issue['attempts']) : '';
+      $this->output->writeln(sprintf('[%s] %s / %s%s: %s%s', $status, $issue['package'], $issue['operation'], $attempts, $issue['reason'], $resolution), OutputInterface::OUTPUT_RAW);
+    }
   }
 
   /**

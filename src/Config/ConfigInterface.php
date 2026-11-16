@@ -10,6 +10,26 @@ interface ConfigInterface {
   const DEFAULT_COMMIT_AUTHOR = 'Drupal <drupal@update-helper>';
 
   /**
+   * Gets the timeout in seconds for Composer commands.
+   */
+  public function getComposerTimeout(): int;
+
+  /**
+   * Total Composer attempts, including the first; one disables retries.
+   */
+  public function getComposerAttempts(): int;
+
+  /**
+   * Initial exponential backoff delay, in seconds.
+   */
+  public function getComposerRetryDelay(): int;
+
+  /**
+   * Additional passes over unresolved transient Composer package failures.
+   */
+  public function getComposerAdditionalPasses(): int;
+
+  /**
    * Get the commits author.
    *
    * @return string

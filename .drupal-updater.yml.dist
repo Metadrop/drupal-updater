@@ -10,3 +10,11 @@ packages: []
 environments: ['@self']
 # Limit of packages to update. Set to 0 for no limits.
 limit: 0
+# Timeout in seconds for each Composer command; other commands retain 300 seconds.
+composerTimeout: 300
+# Total attempts, including the first (1 disables retries; maximum 10).
+composerAttempts: 3
+# Initial delay in seconds; doubles after each failure, capped at 300 seconds.
+composerRetryDelay: 10
+# Extra passes over only unresolved transient Composer package failures (0-3).
+composerAdditionalPasses: 1
