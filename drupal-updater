@@ -23,6 +23,8 @@ use DrupalUpdater\UpdaterCommand;
 
 
 $app = new Application();
-$app->add(new UpdaterCommand());
+// Symfony Console 7.4 added addCommand() and 8.0 removed add().
+$command = new UpdaterCommand();
+method_exists($app, 'addCommand') ? $app->addCommand($command) : $app->add($command);
 $app->setDefaultCommand('update');
 $app->run();
