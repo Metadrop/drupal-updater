@@ -1,5 +1,10 @@
 <?php
 
+/**
+ * @file
+ * Fake Composer whose update result and latest version depend on the mode.
+ */
+
 file_put_contents('composer-calls.jsonl', json_encode(array_slice($argv, 1)) . "\n", FILE_APPEND);
 $mode = getenv('CONSTRAINT_TEST_MODE');
 if ($argv[1] === 'update') {
@@ -13,9 +18,12 @@ if ($argv[1] === 'update') {
 if ($argv[1] === 'show') {
   if (in_array('--outdated', $argv)) {
     $latest = $mode === 'current' ? '1.0.0' : ($mode === 'updated' ? '1.1.0' : $mode);
-    echo json_encode(['locked' => $mode === 'absent' ? [] : [['name' => 'example/noop', 'version' => '1.0.0', 'latest' => $latest]]]);
+    $package = ['name' => 'example/noop', 'version' => '1.0.0', 'latest' => $latest];
+    echo json_encode(['locked' => $mode === 'absent' ? [] : [$package]]);
   }
-  else { echo "type : library\n"; }
+  else {
+    echo "type : library\n";
+  }
   exit(0);
 }
 fwrite(STDERR, 'Unexpected fixture command: ' . implode(' ', $argv));
