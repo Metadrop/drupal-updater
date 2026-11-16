@@ -1,6 +1,7 @@
 <?php
 
 /**
+ * @file
  * Reports the unsupported modules.
  */
 
@@ -26,9 +27,9 @@ $projects = array_filter($project_data, function (array $project) {
 if (!empty($projects)) {
   $projects_unsupported_data = array_map(function ($project) {
 
-    // If the recommended version is the current one, then there aren't recommended
-    // versions as the module is obsolete.
-    $recommended = $project['recommended'] != $project['existing_version']  ? $project['recommended'] : 'None';
+    // If the recommended version is the current one, then there aren't
+    // recommended versions as the module is obsolete.
+    $recommended = $project['recommended'] != $project['existing_version'] ? $project['recommended'] : 'None';
 
     return [
       'project_name' => $project['name'],
@@ -44,5 +45,3 @@ else {
 }
 
 print json_encode($projects_unsupported_data);
-
-

@@ -2,10 +2,27 @@
 
 namespace DrupalUpdater;
 
-/** Saves the working Composer files, including uncommitted requirements. */
+/**
+ * Saves the working Composer files, including uncommitted requirements.
+ */
 class ComposerState {
+
+  /**
+   * Saved file contents, keyed by path.
+   *
+   * @var array<string, string>
+   */
   protected array $files = [];
 
+  /**
+   * Saves the Composer files of the given directory.
+   *
+   * @param string $directory
+   *   Directory holding composer.json and composer.lock.
+   *
+   * @throws \RuntimeException
+   *   When a file cannot be read.
+   */
   public function __construct(string $directory = '.') {
     foreach (['composer.json', 'composer.lock'] as $name) {
       $path = $directory . '/' . $name;
@@ -20,6 +37,9 @@ class ComposerState {
     }
   }
 
+  /**
+   * Writes the saved Composer files back.
+   */
   public function restore(): void {
     foreach ($this->files as $path => $contents) {
       if (file_put_contents($path, $contents) !== strlen($contents)) {
@@ -27,4 +47,5 @@ class ComposerState {
       }
     }
   }
+
 }

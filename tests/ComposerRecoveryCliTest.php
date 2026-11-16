@@ -5,12 +5,35 @@ namespace DrupalUpdater\Tests;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\Process\Process;
 
-/** Runs the installed CLI with real Git/Composer and a controlled failed update. */
+/**
+ * Runs the installed CLI with real Git/Composer and a controlled failed update.
+ */
 class ComposerRecoveryCliTest extends TestCase {
+
+  /**
+   * Fixture project directory.
+   *
+   * @var string
+   */
   private string $directory;
+
+  /**
+   * Path to the real Composer executable.
+   *
+   * @var string
+   */
   private string $composer;
+
+  /**
+   * Composer files and Git state before the update.
+   *
+   * @var array<string, string>
+   */
   private array $before;
 
+  /**
+   * Builds a fixture project with the updater installed through Composer.
+   */
   protected function setUp(): void {
     $this->directory = sys_get_temp_dir() . '/updater-recovery-' . bin2hex(random_bytes(8));
     mkdir($this->directory);
@@ -19,18 +42,21 @@ class ComposerRecoveryCliTest extends TestCase {
     foreach (['fixtures/updater', 'fixtures/diff', 'fixtures/library-1', 'fixtures/library-2', 'control', 'web/core'] as $path) {
       mkdir($this->directory . '/' . $path, 0777, TRUE);
     }
-    // The fixture package contains the candidate's actual source and entrypoint.
-    // Test-runner dependencies supply Symfony; no Drupal database is installed.
+    // The fixture package contains the candidate's actual source and
+    // entrypoint. Test-runner dependencies supply Symfony; no Drupal database
+    // is installed.
     $this->copy($source . '/src', $this->directory . '/fixtures/updater/src');
     copy($source . '/drupal-updater', $this->directory . '/fixtures/updater/drupal-updater');
     $this->json('fixtures/updater/composer.json', [
-      'name' => 'metadrop/drupal-updater', 'version' => '1.0.0',
+      'name' => 'metadrop/drupal-updater',
+      'version' => '1.0.0',
       'require' => ['davidrjonas/composer-lock-diff' => '1.7.1'],
       'autoload' => ['psr-4' => ['DrupalUpdater\\' => 'src/']],
       'bin' => ['drupal-updater'],
     ]);
     $this->json('fixtures/diff/composer.json', [
-      'name' => 'davidrjonas/composer-lock-diff', 'version' => '1.7.1',
+      'name' => 'davidrjonas/composer-lock-diff',
+      'version' => '1.7.1',
       'bin' => ['composer-lock-diff'],
     ]);
     file_put_contents($this->directory . '/fixtures/diff/composer-lock-diff', "#!/usr/bin/env php\n<?php if (in_array('--probe', \$argv)) { echo 'tool available'; } elseif (in_array('--json', \$argv)) { echo '{\"changes\":[],\"changes-dev\":[]}'; }\n");
@@ -38,7 +64,8 @@ class ComposerRecoveryCliTest extends TestCase {
       $this->json('fixtures/' . $path . '/composer.json', ['name' => 'example/library', 'version' => $version]);
     }
     $manifest = [
-      'name' => 'example/project', 'require' => ['example/library' => '1.0.0'],
+      'name' => 'example/project',
+      'require' => ['example/library' => '1.0.0'],
       'repositories' => [
         ['type' => 'path', 'url' => 'fixtures/*', 'options' => ['symlink' => FALSE]],
         ['packagist.org' => FALSE],
@@ -74,6 +101,9 @@ class ComposerRecoveryCliTest extends TestCase {
     file_put_contents($this->directory . '/bootstrap.php', '<?php $loader = require ' . var_export(dirname(__DIR__) . '/vendor/autoload.php', TRUE) . '; $loader->setPsr4("DrupalUpdater\\\\", __DIR__."/vendor/metadrop/drupal-updater/src"); \Composer\InstalledVersions::reload(["root"=>["name"=>"example/project"],"versions"=>["drupal/core"=>["install_path"=>__DIR__."/web/core"]]]);');
   }
 
+  /**
+   * Tests a failed update restores the files and reinstalls the updater tools.
+   */
   public function testFailedMutationRestoresFilesAndReinstallsTools(): void {
     $process = $this->updater('recover');
     $this->assertWorkingStatePreserved();
@@ -84,6 +114,9 @@ class ComposerRecoveryCliTest extends TestCase {
     self::assertSame('tool available', $this->process([PHP_BINARY, 'vendor/bin/composer-lock-diff', '--probe'])->getOutput());
   }
 
+  /**
+   * Tests a failed reinstall stops before updating later packages.
+   */
   public function testFailedReinstallStopsBeforeLaterPackages(): void {
     $process = $this->updater('install-fails', 'example/fail,example/later');
     self::assertFileDoesNotExist($this->directory . '/later-package-ran');
@@ -93,6 +126,9 @@ class ComposerRecoveryCliTest extends TestCase {
     $this->assertWorkingStatePreserved();
   }
 
+  /**
+   * Tests the run stops when a tool is still missing after reinstalling.
+   */
   public function testSuccessfulInstallWithMissingToolStillStops(): void {
     $process = $this->updater('missing-tool', 'example/fail,example/later');
     self::assertFileDoesNotExist($this->directory . '/later-package-ran');
@@ -102,6 +138,9 @@ class ComposerRecoveryCliTest extends TestCase {
     $this->assertWorkingStatePreserved();
   }
 
+  /**
+   * Tests Drush failures keep using the package update error handler.
+   */
   public function testDrushFailureStillUsesItsExistingSingleArgumentHandler(): void {
     $process = $this->updater('drush-fails', 'drupal/example');
     $output = $process->getOutput() . $process->getErrorOutput();
@@ -302,7 +341,8 @@ class ComposerRecoveryCliTest extends TestCase {
     if ($packages !== NULL) { $arguments[] = '--packages=' . $packages; }
     $process = new Process($this->cliArguments($arguments), $this->directory, [
       'PATH' => $this->directory . '/control:' . $this->directory . '/vendor/bin:' . getenv('PATH'),
-      'PWD' => $this->directory, 'RECOVERY_REAL_COMPOSER' => $this->composer,
+      'PWD' => $this->directory,
+      'RECOVERY_REAL_COMPOSER' => $this->composer,
       'RECOVERY_TEST_MODE' => $mode,
     ]);
     $process->setTimeout(30);
@@ -310,14 +350,36 @@ class ComposerRecoveryCliTest extends TestCase {
     return $process;
   }
 
+  /**
+   * Builds the arguments to run the fixture updater CLI.
+   */
   private function cliArguments(array $arguments): array {
-    return array_merge([PHP_BINARY, '-d', 'auto_prepend_file=' . $this->directory . '/bootstrap.php', 'vendor/bin/drupal-updater'], $arguments);
+    return array_merge([
+      PHP_BINARY,
+      '-d',
+      'auto_prepend_file=' . $this->directory . '/bootstrap.php',
+      'vendor/bin/drupal-updater',
+    ], $arguments);
   }
 
+  /**
+   * Resolves the fixture project dependencies offline.
+   */
   private function installFixture(): void {
-    $this->process([$this->composer, 'update', '--no-interaction', '--no-progress', '--no-scripts', '--no-plugins', '--no-audit']);
+    $this->process([
+      $this->composer,
+      'update',
+      '--no-interaction',
+      '--no-progress',
+      '--no-scripts',
+      '--no-plugins',
+      '--no-audit',
+    ]);
   }
 
+  /**
+   * Asserts the Composer files and Git state are the ones before the update.
+   */
   private function assertWorkingStatePreserved(): void {
     self::assertSame($this->before['json'], file_get_contents($this->directory . '/composer.json'));
     self::assertSame($this->before['lock'], file_get_contents($this->directory . '/composer.lock'));
@@ -326,10 +388,18 @@ class ComposerRecoveryCliTest extends TestCase {
     self::assertSame('retain earlier work', file_get_contents($this->directory . '/earlier-success.txt'));
   }
 
+  /**
+   * Gets the Composer operations the fixture received.
+   */
   private function operations(): array {
-    return array_map(function ($line) { return json_decode($line, TRUE)[0]; }, file($this->directory . '/composer-calls.jsonl', FILE_IGNORE_NEW_LINES));
+    return array_map(function ($line) {
+      return json_decode($line, TRUE)[0];
+    }, file($this->directory . '/composer-calls.jsonl', FILE_IGNORE_NEW_LINES));
   }
 
+  /**
+   * Runs a command in the fixture project.
+   */
   private function process(array $arguments): Process {
     $process = new Process($arguments, $this->directory);
     $process->setTimeout(30);
@@ -337,26 +407,49 @@ class ComposerRecoveryCliTest extends TestCase {
     return $process;
   }
 
+  /**
+   * Writes a JSON file in the fixture project.
+   */
   private function json(string $path, array $value): void {
     file_put_contents($this->directory . '/' . $path, json_encode($value, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
   }
 
+  /**
+   * Copies a directory recursively.
+   */
   private function copy(string $source, string $target): void {
     mkdir($target);
     foreach (new \FilesystemIterator($source) as $file) {
       $destination = $target . '/' . $file->getFilename();
-      if ($file->isDir()) { $this->copy($file->getPathname(), $destination); }
-      else { copy($file->getPathname(), $destination); }
+      if ($file->isDir()) {
+        $this->copy($file->getPathname(), $destination);
+      }
+      else {
+        copy($file->getPathname(), $destination);
+      }
     }
   }
 
-  protected function tearDown(): void { $this->remove($this->directory); }
+  /**
+   * Removes the fixture project.
+   */
+  protected function tearDown(): void {
+    $this->remove($this->directory);
+  }
 
+  /**
+   * Removes a file or directory recursively.
+   */
   private function remove(string $path): void {
     if (is_dir($path) && !is_link($path)) {
-      foreach (new \FilesystemIterator($path) as $file) { $this->remove($file->getPathname()); }
+      foreach (new \FilesystemIterator($path) as $file) {
+        $this->remove($file->getPathname());
+      }
       rmdir($path);
     }
-    else { unlink($path); }
+    else {
+      unlink($path);
+    }
   }
+
 }
