@@ -6,8 +6,8 @@
         "drupal-updater"
     ],
     "require": {
-        "symfony/console": ">=4",
-        "symfony/process": ">=4",
+        "symfony/console": ">=5.4",
+        "symfony/process": ">=5.4",
         "drush/drush": ">=10",
         "davidrjonas/composer-lock-diff": "^1.7"
     },
@@ -24,7 +24,7 @@
         }
     },
     "require-dev": {
-        "phpunit/phpunit": "^9.6 || ^10.5 || ^11.5"
+        "phpunit/phpunit": "^9.6 || ^10.5 || ^11.5 || ^12.5 || ^13.4"
     },
     "autoload-dev": {
         "psr-4": {
