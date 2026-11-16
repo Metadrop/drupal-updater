@@ -1,0 +1,35 @@
+name: PHPUnit
+
+on:
+  pull_request:
+  push:
+    branches:
+      - 1.x
+
+jobs:
+  phpunit:
+    name: PHP ${{ matrix.php }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        php: ['8.1', '8.2', '8.3', '8.4']
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: ${{ matrix.php }}
+          coverage: none
+          tools: composer:v2
+
+      - uses: ramsey/composer-install@v3
+        with:
+          dependency-versions: highest
+          composer-options: --prefer-stable
+
+      - name: Lint
+        run: composer lint
+
+      - name: PHPUnit
+        run: composer test
