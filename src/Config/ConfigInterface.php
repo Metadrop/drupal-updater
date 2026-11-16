@@ -2,6 +2,9 @@
 
 namespace DrupalUpdater\Config;
 
+/**
+ * Configuration of the updater.
+ */
 interface ConfigInterface {
 
   const DEFAULT_COMMIT_AUTHOR = 'Drupal <drupal@update-helper>';
@@ -23,18 +26,18 @@ interface ConfigInterface {
   public function setAuthor(string $author);
 
   /**
-   * Sets the environment list.
-   *
-   * @param array $environments
-   *   Environemnts.
-   */
-  public function getEnvironments() : array;
-
-  /**
    * Gets the environment list.
    *
    * @return array|string[]
    *   List of environments.
+   */
+  public function getEnvironments() : array;
+
+  /**
+   * Sets the environment list.
+   *
+   * @param array $environments
+   *   Environments.
    */
   public function setEnvironments(array $environments);
 
@@ -49,7 +52,7 @@ interface ConfigInterface {
   /**
    * Setup securities update.
    *
-   * @param bool $onlySecurities
+   * @param bool $only_update_securities
    *   If true, only securities will be updated.
    */
   public function setOnlySecurities(bool $only_update_securities);
@@ -65,7 +68,7 @@ interface ConfigInterface {
   /**
    * Setup to not update development packages.
    *
-   * @param bool $noDev
+   * @param bool $no_dev
    *   If true, development packages won't be updated.
    */
   public function setNoDev(bool $no_dev);

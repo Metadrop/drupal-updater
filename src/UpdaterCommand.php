@@ -26,6 +26,11 @@ class UpdaterCommand extends Command {
    */
   protected OutputInterface $output;
 
+  /**
+   * Updater configuration.
+   *
+   * @var \DrupalUpdater\Config\ConfigInterface
+   */
   protected ConfigInterface $config;
 
   /**
@@ -40,6 +45,11 @@ class UpdaterCommand extends Command {
    */
   protected array $outdatedPackages = [];
 
+  /**
+   * Whether to print the full report of outdated packages.
+   *
+   * @var bool
+   */
   protected bool $showFullReport = TRUE;
 
   /**
@@ -59,8 +69,7 @@ class UpdaterCommand extends Command {
   /**
    * {@inheritdoc}
    */
-  public function __construct(?string $name = null)
-  {
+  public function __construct(?string $name = NULL) {
     if (empty($name)) {
       $name = 'update';
     }
@@ -104,7 +113,7 @@ Update includes:
    *
    * Anything passed to input can override configuration.
    *
-   * @param InputInterface $input
+   * @param \Symfony\Component\Console\Input\InputInterface $input
    *   Input.
    */
   protected function mapInputToConfiguration(InputInterface $input) {
@@ -117,24 +126,24 @@ Update includes:
     }
 
     if (!empty($input->getOption('security'))) {
-      $this->getConfiguration()->setOnlySecurities(true);
+      $this->getConfiguration()->setOnlySecurities(TRUE);
     }
     elseif (!empty($input->getOption('no-security'))) {
-      $this->getConfiguration()->setOnlySecurities(false);
+      $this->getConfiguration()->setOnlySecurities(FALSE);
     }
 
     if (!empty($input->getOption('dev'))) {
-      $this->getConfiguration()->setNoDev(false);
+      $this->getConfiguration()->setNoDev(FALSE);
     }
     elseif (!empty($input->getOption('no-dev'))) {
-      $this->getConfiguration()->setNoDev(true);
+      $this->getConfiguration()->setNoDev(TRUE);
     }
 
     if (!empty($input->getOption('consolidate-configuration'))) {
-      $this->getConfiguration()->setConsolidateConfiguration(true);
+      $this->getConfiguration()->setConsolidateConfiguration(TRUE);
     }
     elseif (!empty($input->getOption('no-consolidate-configuration'))) {
-      $this->getConfiguration()->setConsolidateConfiguration(false);
+      $this->getConfiguration()->setConsolidateConfiguration(FALSE);
     }
 
     $packages_to_update_parameter = $input->getOption('packages') ?? '';
@@ -229,6 +238,12 @@ Update includes:
     return 0;
   }
 
+  /**
+   * Loads the configuration from a file, or the defaults when it is missing.
+   *
+   * @param string $configuration_filepath
+   *   Path to the configuration file.
+   */
   protected function setupConfig(string $configuration_filepath) {
     $this->output->writeln(sprintf('Selected configuration file: %s', $configuration_filepath));
 
@@ -244,10 +259,22 @@ Update includes:
     $this->setConfiguration($config);
   }
 
+  /**
+   * Sets the updater configuration.
+   *
+   * @param \DrupalUpdater\Config\ConfigInterface $config
+   *   Configuration.
+   */
   protected function setConfiguration(ConfigInterface $config) {
     $this->config = $config;
   }
 
+  /**
+   * Gets the updater configuration.
+   *
+   * @return \DrupalUpdater\Config\ConfigInterface
+   *   Configuration.
+   */
   protected function getConfiguration() {
     return $this->config;
   }
@@ -278,7 +305,7 @@ Update includes:
    * @param string $command
    *   Command.
    *
-   * @return Process
+   * @return \Symfony\Component\Process\Process
    *   It can be used to obtain the command output if needed.
    *
    * @throws \RuntimeException
@@ -302,7 +329,7 @@ Update includes:
    * @param array $parameters
    *   List of parameters the command needs.
    *
-   * @return Process
+   * @return \Symfony\Component\Process\Process
    *   Process result.
    */
   protected function runComposer(string $command, array $parameters) {
@@ -316,8 +343,9 @@ Update includes:
    * argument is passed to the command.
    *
    * @return string
+   *   The --no-dev parameter, or an empty string.
    */
-  protected function getNoDevParameter(){
+  protected function getNoDevParameter() {
     return $this->getConfiguration()->noDev() ? '--no-dev' : '';
   }
 
@@ -408,12 +436,13 @@ Update includes:
   /**
    * Given a list of packages , find its direct packages.
    *
-   * @see UpdaterCommand::findDirectPackage()
-   *
    * @param array $packages_list
    *   Packages list.
+   *
    * @return array
    *   List of direct packages.
+   *
+   * @see UpdaterCommand::findDirectPackage()
    */
   protected function findDirectPackagesFromList(array $packages_list) {
     if (empty($packages_list)) {
@@ -438,9 +467,10 @@ Update includes:
   /**
    * Find the direct package for a specific not direct dependency.
    *
-   * If no direct package is found, consider the self package as direct. It is a extreme use
-   * case where a too deep dependency is not found. For module convenience, it is needed to consider
-   * package as direct so it can be updated.
+   * If no direct package is found, consider the self package as direct. It is
+   * a extreme use case where a too deep dependency is not found. For module
+   * convenience, it is needed to consider package as direct so it can be
+   * updated.
    *
    * @param string $package
    *   Package.
@@ -472,8 +502,6 @@ Update includes:
    *
    * This is used to get direct apckages from not direct packages.
    *
-   * @see UpdaterCommand::findDirectPackage()
-   *
    * @param string $command
    *   List that return packages list.
    * @param array $package_list
@@ -481,6 +509,8 @@ Update includes:
    *
    * @return string|null
    *   FIrst package from command that is present in package list.
+   *
+   * @see UpdaterCommand::findDirectPackage()
    */
   protected function findPackageInPackageListCommand(string $command, array $package_list) {
     $package_list_output = array_filter(explode("\n", (string) trim($this->runCommand($command)
@@ -491,7 +521,7 @@ Update includes:
       }
     }
 
-    return null;
+    return NULL;
   }
 
   /**
@@ -501,7 +531,8 @@ Update includes:
    * removing any element that is not a package and removing spaces.
    *
    * @param string $package_list
-   *   List of packages coming from a bash command (s.e.: composer show --names-only).
+   *   List of packages coming from a bash command
+   *   (s.e.: composer show --names-only).
    *
    * @return array
    *   List of packages. Example:
@@ -678,8 +709,9 @@ Update includes:
   /**
    * Finds the Drupal root.
    *
-   * Drupal root standard is web, but there are other projects where the path is docroot,
-   * and another complex structures that requires changing the root folder.
+   * Drupal root standard is web, but there are other projects where the path
+   * is docroot, and another complex structures that requires changing the
+   * root folder.
    *
    * @return string|void
    *   Drupal root.
@@ -714,7 +746,8 @@ Update includes:
    *   Package name.
    *
    * @return string
-   *   Format: UPDATE - <package>: (package)(, dependencies)(, configuration changes).
+   *   Format: UPDATE - <package>: (package)(, dependencies)(, configuration
+   *   changes).
    */
   protected function calculateModuleUpdateCommitMessage(string $package) {
 
@@ -834,7 +867,7 @@ Update includes:
   }
 
   /**
-   * Shows all the pending updates
+   * Shows all the pending updates.
    */
   protected function showPendingUpdates() {
 
@@ -907,7 +940,7 @@ Update includes:
       }
     }
 
-    $unsupported_modules_list = array_values(array_map (function ($unsupported_module) {
+    $unsupported_modules_list = array_values(array_map(function ($unsupported_module) {
       $unsupported_module['environments'] = implode("\n", $unsupported_module['environments']);
       return array_values($unsupported_module);
     }, $unsupported_modules_list));
@@ -976,6 +1009,5 @@ Update includes:
   protected function printHeader2(string $text) {
     $this->output->writeln(sprintf("/// %s ///\n", $text));
   }
-
 
 }

@@ -28,21 +28,21 @@ class Config implements ConfigInterface {
    *
    * @var bool
    */
-  protected bool $onlySecurities = false;
+  protected bool $onlySecurities = FALSE;
 
   /**
    * Set to true to only update production packages.
    *
    * @var bool
    */
-  protected bool $noDev = false;
+  protected bool $noDev = FALSE;
 
   /**
    * Limit of updates.
    *
    * @var int
    */
-  protected ?int $limit = null;
+  protected ?int $limit = NULL;
 
   /**
    * Set to true to consolidate configuration.
@@ -51,7 +51,7 @@ class Config implements ConfigInterface {
    *
    * @var bool
    */
-  protected bool $consolidateConfiguration = true;
+  protected bool $consolidateConfiguration = TRUE;
 
   /**
    * If set, only this packages will be updated, along its dependencies.
