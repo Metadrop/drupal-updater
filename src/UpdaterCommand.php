@@ -76,7 +76,7 @@ class UpdaterCommand extends Command {
   /**
    * {@inheritdoc}
    */
-  protected function configure() {
+  protected function configure(): void {
     $this->setHelp('Update composer packages.
 
 Update includes:
@@ -96,7 +96,7 @@ Update includes:
   /**
    * {@inheritdoc}
    */
-  protected function initialize(InputInterface $input, OutputInterface $output) {
+  protected function initialize(InputInterface $input, OutputInterface $output): void {
     $this->output = $output;
     $this->setupConfig($input->getOption('config'));
     $this->mapInputToConfiguration($input);
