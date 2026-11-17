@@ -137,3 +137,8 @@ Example:
 
 The final pending-update report prints an explicit message when a package or
 security category has no results, rather than leaving that category blank.
+
+When an available package update leaves the lock file unchanged, the updater
+suggests a `composer require vendor/package:version -W --dry-run` command to
+investigate dependency constraints. The suggested version is the reported
+latest version. The updater prints this diagnostic command without executing it.
