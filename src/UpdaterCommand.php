@@ -656,12 +656,19 @@ Update includes:
   protected function updatePackage(string $package): void {
     $this->printHeader2(sprintf('Updating: %s', $package));
     $before = $this->lockedPackageVersions();
+    $state = new ComposerState();
+    $required_tools = [];
+    foreach (['vendor/bin/composer-lock-diff'] as $tool) {
+      if (is_file($tool)) {
+        $required_tools[] = $tool;
+      }
+    }
     try {
       $result = $this->runComposer('update', [$package, '--with-dependencies']);
     }
     catch (\Exception $e) {
       $this->packageIssues->record(PackageIssue::composerFailure($package, $this->packageErrorReason($e), $before[$package] ?? NULL));
-      $this->handlePackageUpdateErrors($e);
+      $this->handleComposerUpdateErrors($e, $state, $required_tools);
       return;
     }
 
@@ -675,6 +682,11 @@ Update includes:
       if (($before[$package][0] ?? NULL) !== $available_update->latest) {
         $this->packageIssues->record(PackageIssue::unchangedLock($package, $available_update->latest, $before[$package] ?? NULL));
       }
+
+      $this->output->writeln(sprintf(
+        'For more information, run: composer require %s -W --dry-run',
+        escapeshellarg($package . ':' . $available_update->latest)
+      ), OutputInterface::OUTPUT_RAW);
 
       $error_output = trim($result->getOutput());
       $valid_errors = [
@@ -883,13 +895,47 @@ Update includes:
   }
 
   /**
-   * Handle errors produced in a update.
-   *
-   * There are errors either in composer update or drush updb, in those
-   * case all the possible changes are reverted and the error message is shown.
+   * Restore dependencies after a failed Composer update.
    *
    * @param \Exception $e
-   *   Exception.
+   *   Original update failure.
+   * @param \DrupalUpdater\ComposerState $state
+   *   Working Composer files immediately before the update.
+   * @param string[] $required_tools
+   *   Updater executables present before the update.
+   *
+   * @throws \RuntimeException
+   *   If recovery cannot restore consistent dependencies and required tools.
+   */
+  protected function handleComposerUpdateErrors(\Exception $e, ComposerState $state, array $required_tools): void {
+    $this->output->writeln("\n!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
+    $error_ouput = $e instanceof ProcessFailedException ? $e->getProcess()->getErrorOutput() : $e->getMessage();
+    $this->output->writeln($error_ouput);
+    $this->output->writeln('Updating package FAILED: recovering previous state.');
+    $this->output->writeln('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!');
+    try {
+      $state->restore();
+      if ($state->isVendorChanged()) {
+        // Reinstall what the restored lock says, without repeating project
+        // scripts. Composer plugins may still execute.
+        $this->runComposer('install', ['--no-interaction', '--no-progress', '--no-scripts']);
+        foreach ($required_tools as $tool) {
+          if (!is_file($tool)) {
+            throw new \RuntimeException('Required updater executable missing: ' . $tool);
+          }
+        }
+      }
+    }
+    catch (\Exception $recovery_error) {
+      throw new \RuntimeException('Composer recovery failed; stopping to avoid inconsistent dependencies: ' . $recovery_error->getMessage(), 0, $recovery_error);
+    }
+  }
+
+  /**
+   * Preserve the existing error handler for the separate Drush update path.
+   *
+   * @param \Exception $e
+   *   Update failure.
    */
   protected function handlePackageUpdateErrors(\Exception $e): void {
     $this->output->writeln("\n!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
@@ -974,30 +1020,41 @@ Update includes:
 
     if ($this->getConfiguration()->onlyUpdateSecurities()) {
       $this->printHeader2('Not Updated Securities:');
-      $this->output->writeln(
+      $this->showPendingUpdateResult(
         $this->getPackagesWithAdvisories(),
+        'No pending security updates found.'
       );
 
     }
     else {
       $this->printHeader2('Not Updated Packages (Direct):');
-      $this->output->writeln(
-        $this->runCommand('composer show --locked --outdated --direct')->getOutput()
+      $this->showPendingUpdateResult(
+        $this->runCommand('composer show --locked --outdated --direct')->getOutput(),
+        'No pending direct package updates found.'
       );
 
       $this->output->writeln('');
       $this->printHeader2('Not Updated Packages (ALL):');
-      $this->output->writeln(
-        $this->runCommand('composer show --locked --outdated')->getOutput()
+      $this->showPendingUpdateResult(
+        $this->runCommand('composer show --locked --outdated')->getOutput(),
+        'No pending package updates found.'
       );
 
       $this->output->writeln('');
       $this->printHeader2('Not Updated Securities (ALL):');
-      $this->output->writeln(
-        trim($this->getPackagesWithAdvisories())
+      $this->showPendingUpdateResult(
+        trim($this->getPackagesWithAdvisories()),
+        'No pending security updates found.'
       );
       $this->output->writeln("");
     }
+  }
+
+  /**
+   * Print an explicit message instead of leaving an empty report category.
+   */
+  protected function showPendingUpdateResult(string $result, string $empty_message): void {
+    $this->output->writeln(trim($result) === '' ? $empty_message : $result);
   }
 
   /**

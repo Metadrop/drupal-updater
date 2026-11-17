@@ -93,7 +93,7 @@ final class UpdatePackagesTest extends UpdaterTestCase {
     $this->assertLockedVersion('example/vulnerable', '1.0.1');
     $this->assertLockedVersion('example/library', '1.0.0');
     $this->assertCommitSubjects(['UPDATE - example/vulnerable: package (1.0.0 -> 1.0.1)']);
-    self::assertMatchesRegularExpression('#Not Updated Securities: ///\s*///#', $run->section('Report'));
+    self::assertStringContainsString("/// Not Updated Securities: ///\n\nNo pending security updates found.", $run->section('Report'));
   }
 
   /**
