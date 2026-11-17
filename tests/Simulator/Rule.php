@@ -98,7 +98,7 @@ final class Rule {
    * Succeeds without doing anything, e.g. an update that changes nothing.
    */
   public function succeeds(): self {
-    return $this;
+    return $this->then(new Output(''));
   }
 
   /**

@@ -158,6 +158,8 @@ abstract class UpdaterTestCase extends TestCase {
     return [
       'PATH' => dirname(__DIR__) . '/bin' . PATH_SEPARATOR . getenv('PATH'),
       'PWD' => $this->project()->path(),
+      // Wide enough for the console not to wrap error messages.
+      'COLUMNS' => '1000',
       SimulatorState::ENVIRONMENT_VARIABLE => $this->state()->directory(),
     ] + $this->composerEnvironment();
   }
