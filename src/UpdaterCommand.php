@@ -5,6 +5,8 @@ namespace DrupalUpdater;
 use Composer\InstalledVersions;
 use DrupalUpdater\Config\Config;
 use DrupalUpdater\Config\ConfigInterface;
+use DrupalUpdater\PackageIssue\PackageIssue;
+use DrupalUpdater\PackageIssue\PackageIssueReport;
 use DrupalUpdater\PostUpdate\PostUpdateDDQG;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputInterface;
@@ -56,6 +58,11 @@ class UpdaterCommand extends Command {
   protected bool $showFullReport = TRUE;
 
   /**
+   * Package issues of the run, printed at its end.
+   */
+  protected PackageIssueReport $packageIssues;
+
+  /**
    * Total number of direct packages successfully updated.
    *
    * @var int
@@ -79,6 +86,7 @@ class UpdaterCommand extends Command {
     parent::__construct($name);
 
     $this->postUpdateProcessors[] = new PostUpdateDDQG();
+    $this->packageIssues = new PackageIssueReport();
   }
 
   /**
@@ -204,6 +212,19 @@ Update includes:
    * {@inheritdoc}
    */
   protected function execute(InputInterface $input, OutputInterface $output) : int {
+    $this->packageIssues = new PackageIssueReport();
+    try {
+      return $this->runUpdates();
+    }
+    finally {
+      $this->showPackageIssues();
+    }
+  }
+
+  /**
+   * Run the existing update workflow while retaining issues on early exit.
+   */
+  protected function runUpdates(): int {
     $this->runCommand('cp composer.lock composer.drupalupdater.lock');
     $this->printSummary();
     $this->printHeader1('1. Consolidating configuration');
@@ -634,6 +655,7 @@ Update includes:
    */
   protected function updatePackage(string $package): void {
     $this->printHeader2(sprintf('Updating: %s', $package));
+    $before = $this->lockedPackageVersions();
     $state = new ComposerState();
     $required_tools = [];
     foreach (['vendor/bin/composer-lock-diff'] as $tool) {
@@ -645,6 +667,7 @@ Update includes:
       $result = $this->runComposer('update', [$package, '--with-dependencies']);
     }
     catch (\Exception $e) {
+      $this->packageIssues->record(PackageIssue::composerFailure($package, $this->packageErrorReason($e), $before[$package] ?? NULL));
       $this->handleComposerUpdateErrors($e, $state, $required_tools);
       return;
     }
@@ -654,6 +677,11 @@ Update includes:
     $available_update = $this->getAvailableUpdate($package);
     if (!empty($available_update) && !empty($available_update->latest) && !$composer_lock_is_changed) {
       $this->output->writeln(sprintf("Package %s has an update available to %s version. Due to composer.json constraints, it hasn't been updated.\n", $package, $available_update->latest));
+      // The cached outdated list may describe a version changed earlier in
+      // the run. Do not add a constraint if the locked package is now current.
+      if (($before[$package][0] ?? NULL) !== $available_update->latest) {
+        $this->packageIssues->record(PackageIssue::unchangedLock($package, $available_update->latest, $before[$package] ?? NULL));
+      }
 
       $this->output->writeln(sprintf(
         'For more information, run: composer require %s -W --dry-run',
@@ -695,6 +723,7 @@ Update includes:
         }
       }
       catch (\Exception $e) {
+        $this->packageIssues->record(PackageIssue::drushFailure($package, $this->packageErrorReason($e), $before[$package] ?? NULL));
         $this->handlePackageUpdateErrors($e);
         return;
       }
@@ -716,6 +745,8 @@ Update includes:
 
     $this->runCommand(sprintf('git commit -m "%s" -m "%s" --author="%s" -n', $commit_message, $updated_packages, $this->getConfiguration()->getAuthor()));
     $this->updatedPackages++;
+    $changed_packages = array_keys(($composerLockDiff['changes'] ?? []) + ($composerLockDiff['changes-dev'] ?? []));
+    $this->packageIssues->resolveChanged($changed_packages, $this->lockedPackageVersions());
 
   }
 
@@ -913,6 +944,56 @@ Update includes:
     $this->output->writeln('Updating package FAILED: recovering previous state.');
     $this->output->writeln('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!');
     $this->runCommand('git checkout composer.json composer.lock');
+  }
+
+  /**
+   * Gets the error output of a failed package update, or its message.
+   */
+  protected function packageErrorReason(\Exception $e): string {
+    $reason = $e instanceof ProcessFailedException ? trim($e->getProcess()->getErrorOutput()) : $e->getMessage();
+    return $reason !== '' ? $reason : $e->getMessage();
+  }
+
+  /**
+   * Gets a fingerprint of each locked package, to tell when it changes.
+   *
+   * Best effort: an unreadable lock gives no fingerprints rather than an
+   * error, so it never interrupts an update or its recovery.
+   *
+   * @return array<string, array<int, string|null>>
+   *   Version and source and dist references, keyed by package name.
+   */
+  protected function lockedPackageVersions(): array {
+    $contents = is_readable('composer.lock') ? file_get_contents('composer.lock') : FALSE;
+    $lock = json_decode($contents === FALSE ? '' : $contents, TRUE);
+    $versions = [];
+    if (!is_array($lock)) {
+      return $versions;
+    }
+    foreach (array_merge((array) ($lock['packages'] ?? []), (array) ($lock['packages-dev'] ?? [])) as $package) {
+      if (!is_array($package) || !isset($package['name'], $package['version']) || !is_string($package['name']) || !is_string($package['version'])) {
+        continue;
+      }
+      $versions[$package['name']] = [
+        $package['version'],
+        $package['source']['reference'] ?? NULL,
+        $package['dist']['reference'] ?? NULL,
+      ];
+    }
+    return $versions;
+  }
+
+  /**
+   * Prints the package update issues collected during the run.
+   */
+  protected function showPackageIssues(): void {
+    if ($this->packageIssues->isEmpty()) {
+      return;
+    }
+    $this->printHeader1('Package update issues');
+    foreach ($this->packageIssues->lines() as $line) {
+      $this->output->writeln($line, OutputInterface::OUTPUT_RAW);
+    }
   }
 
   /**
