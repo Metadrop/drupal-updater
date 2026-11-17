@@ -5,6 +5,8 @@ namespace DrupalUpdater;
 use Composer\InstalledVersions;
 use DrupalUpdater\Config\Config;
 use DrupalUpdater\Config\ConfigInterface;
+use DrupalUpdater\PackageIssue\PackageIssue;
+use DrupalUpdater\PackageIssue\PackageIssueReport;
 use DrupalUpdater\PostUpdate\PostUpdateDDQG;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputInterface;
@@ -56,11 +58,9 @@ class UpdaterCommand extends Command {
   protected bool $showFullReport = TRUE;
 
   /**
-   * Package issues retained for the final report, including later resolutions.
-   *
-   * @var array<int, array<string, mixed>>
+   * Package issues of the run, printed at its end.
    */
-  protected array $packageIssues = [];
+  protected PackageIssueReport $packageIssues;
 
   /**
    * Total number of direct packages successfully updated.
@@ -86,6 +86,7 @@ class UpdaterCommand extends Command {
     parent::__construct($name);
 
     $this->postUpdateProcessors[] = new PostUpdateDDQG();
+    $this->packageIssues = new PackageIssueReport();
   }
 
   /**
@@ -211,7 +212,7 @@ Update includes:
    * {@inheritdoc}
    */
   protected function execute(InputInterface $input, OutputInterface $output) : int {
-    $this->packageIssues = [];
+    $this->packageIssues = new PackageIssueReport();
     try {
       return $this->runUpdates();
     }
@@ -659,9 +660,7 @@ Update includes:
       $result = $this->runComposer('update', [$package, '--with-dependencies']);
     }
     catch (\Exception $e) {
-      $reason = $this->packageErrorReason($e);
-      $kind = preg_match('/Your requirements could not be resolved to an installable set of packages|conflicts with your root composer.json require/i', $reason) ? 'constraint' : 'execution';
-      $this->recordPackageIssue($package, 'composer-update', $kind, $reason, $before[$package] ?? NULL);
+      $this->packageIssues->record(PackageIssue::composerFailure($package, $this->packageErrorReason($e), $before[$package] ?? NULL));
       $this->handlePackageUpdateErrors($e);
       return;
     }
@@ -674,7 +673,7 @@ Update includes:
       // The cached outdated list may describe a version changed earlier in
       // the run. Do not add a constraint if the locked package is now current.
       if (($before[$package][0] ?? NULL) !== $available_update->latest) {
-        $this->recordPackageIssue($package, 'composer-update', 'constraint', 'No compatible change was produced by Composer; available version: ' . $available_update->latest, $before[$package] ?? NULL);
+        $this->packageIssues->record(PackageIssue::unchangedLock($package, $available_update->latest, $before[$package] ?? NULL));
       }
 
       $error_output = trim($result->getOutput());
@@ -712,7 +711,7 @@ Update includes:
         }
       }
       catch (\Exception $e) {
-        $this->recordPackageIssue($package, 'drush-update', 'execution', $this->packageErrorReason($e), $before[$package] ?? NULL);
+        $this->packageIssues->record(PackageIssue::drushFailure($package, $this->packageErrorReason($e), $before[$package] ?? NULL));
         $this->handlePackageUpdateErrors($e);
         return;
       }
@@ -734,7 +733,8 @@ Update includes:
 
     $this->runCommand(sprintf('git commit -m "%s" -m "%s" --author="%s" -n', $commit_message, $updated_packages, $this->getConfiguration()->getAuthor()));
     $this->updatedPackages++;
-    $this->resolvePackageIssues($composerLockDiff);
+    $changed_packages = array_keys(($composerLockDiff['changes'] ?? []) + ($composerLockDiff['changes-dev'] ?? []));
+    $this->packageIssues->resolveChanged($changed_packages, $this->lockedPackageVersions());
 
   }
 
@@ -909,38 +909,17 @@ Update includes:
   }
 
   /**
-   * Records a package update issue for the final report.
+   * Gets a fingerprint of each locked package, to tell when it changes.
    *
-   * @param string $package
-   *   Package name.
-   * @param string $operation
-   *   Failed operation, such as composer-update or drush-update.
-   * @param string $kind
-   *   Issue kind: execution or constraint.
-   * @param string $reason
-   *   Failure reason.
-   * @param array<int, string|null>|null $before
-   *   Locked version and references of the package before the update.
-   */
-  protected function recordPackageIssue(string $package, string $operation, string $kind, string $reason, ?array $before): void {
-    $this->packageIssues[] = [
-      'package' => $package,
-      'operation' => $operation,
-      'kind' => $kind,
-      'reason' => $reason,
-      'before' => $before,
-      'resolved' => FALSE,
-    ];
-  }
-
-  /**
-   * Best-effort fingerprints for reporting; do not interrupt update recovery.
+   * Best effort: an unreadable lock gives no fingerprints rather than an
+   * error, so it never interrupts an update or its recovery.
    *
    * @return array<string, array<int, string|null>>
    *   Version and source and dist references, keyed by package name.
    */
   protected function lockedPackageVersions(): array {
-    $lock = json_decode(@file_get_contents('composer.lock') ?: '', TRUE);
+    $contents = is_readable('composer.lock') ? file_get_contents('composer.lock') : FALSE;
+    $lock = json_decode($contents === FALSE ? '' : $contents, TRUE);
     $versions = [];
     if (!is_array($lock)) {
       return $versions;
@@ -959,35 +938,15 @@ Update includes:
   }
 
   /**
-   * Resolve only Composer issues for packages changed by a successful update.
-   *
-   * @param array<string, mixed> $diff
-   *   Composer lock diff of the successful update.
-   */
-  protected function resolvePackageIssues(array $diff): void {
-    $after = $this->lockedPackageVersions();
-    foreach ($this->packageIssues as &$issue) {
-      $package = $issue['package'];
-      if (!$issue['resolved'] && $issue['operation'] === 'composer-update' &&
-          $this->isPackageUpdated($package, $diff) && isset($after[$package]) && $after[$package] !== $issue['before']) {
-        $issue['resolved'] = TRUE;
-      }
-    }
-    unset($issue);
-  }
-
-  /**
    * Prints the package update issues collected during the run.
    */
   protected function showPackageIssues(): void {
-    if (empty($this->packageIssues)) {
+    if ($this->packageIssues->isEmpty()) {
       return;
     }
     $this->printHeader1('Package update issues');
-    foreach ($this->packageIssues as $issue) {
-      $status = $issue['resolved'] ? 'resolved' : $issue['kind'];
-      $resolution = $issue['resolved'] ? ' (Resolved by a later successful package update.)' : '';
-      $this->output->writeln(sprintf('[%s] %s / %s: %s%s', $status, $issue['package'], $issue['operation'], $issue['reason'], $resolution), OutputInterface::OUTPUT_RAW);
+    foreach ($this->packageIssues->lines() as $line) {
+      $this->output->writeln($line, OutputInterface::OUTPUT_RAW);
     }
   }
 
