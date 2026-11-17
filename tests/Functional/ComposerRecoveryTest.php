@@ -42,19 +42,14 @@ final class ComposerRecoveryTest extends UpdaterTestCase {
     ];
     self::assertNotSame('', $project->uncommittedChanges());
     self::assertFileExists($project->path('vendor/bin/composer-lock-diff'));
-
-    $this->scenario()->composer()->on('update', 'example/fail')
-      ->writes('composer.json', '{}')
-      ->writes('composer.lock', '{}')
-      ->removes('vendor/example/tools')
-      ->removes('vendor/bin/composer-lock-diff')
-      ->fails('curl error 28: deliberate failed update');
   }
 
   /**
    * Tests a failed update restores the working files and reinstalls the tools.
    */
   public function testFailedUpdateRestoresWorkingFilesAndReinstallsTools(): void {
+    $this->failUpdateChangingVendor();
+
     $run = $this->updatePackages('example/fail')->assertSuccessful();
 
     $this->assertWorkingStatePreserved();
@@ -64,9 +59,29 @@ final class ComposerRecoveryTest extends UpdaterTestCase {
   }
 
   /**
+   * Tests a failed update that left vendor untouched does not reinstall.
+   */
+  public function testFailedUpdateWithoutVendorChangesDoesNotReinstall(): void {
+    $this->scenario()->composer()->on('update', 'example/fail')
+      ->writes('composer.lock', '{}')
+      ->fails('Your requirements could not be resolved to an installable set of packages.', 2);
+
+    $run = $this->updatePackages('example/fail', 'example/later')->assertSuccessful();
+
+    self::assertSame(['update', 'update'], $this->operations($run));
+    $this->assertLockedVersion('example/fail', '1.0.0');
+    $this->assertLockedVersion('example/later', '1.1.0');
+    // The commit also takes the uncommitted example/tools change.
+    $commits = $this->project()->commitSubjects();
+    self::assertCount(1, $commits);
+    self::assertStringStartsWith('UPDATE - example/later: package (1.0.0 -> 1.1.0)', $commits[0]);
+  }
+
+  /**
    * Tests a failed reinstall stops before updating later packages.
    */
   public function testFailedReinstallStopsBeforeLaterPackages(): void {
+    $this->failUpdateChangingVendor();
     $this->scenario()->composer()->on('install')->fails('deliberate recovery install failure');
 
     $run = $this->updatePackages('example/fail', 'example/later')->assertFailed();
@@ -80,11 +95,12 @@ final class ComposerRecoveryTest extends UpdaterTestCase {
    * Tests the run stops when a tool is still missing after reinstalling.
    */
   public function testMissingToolAfterReinstallStillStops(): void {
+    $this->failUpdateChangingVendor();
     $this->scenario()->composer()->on('install')->passthrough()->removes('vendor/bin/composer-lock-diff');
 
     $run = $this->updatePackages('example/fail', 'example/later')->assertFailed();
 
-    $run->assertOutputContains('Required updater executable missing');
+    $run->assertOutputContains('Required updater executable missing: vendor/bin/composer-lock-diff');
     self::assertSame(['update', 'install'], $this->operations($run));
     $this->assertWorkingStatePreserved();
   }
@@ -101,6 +117,22 @@ final class ComposerRecoveryTest extends UpdaterTestCase {
     self::assertStringNotContainsString('Too few arguments', $run->output());
     $run->assertCalled(Scenario::DRUSH, 'cr');
     $run->assertNotCalled(Scenario::COMPOSER, 'install');
+  }
+
+  /**
+   * Makes the update of example/fail break vendor before failing.
+   *
+   * Like Composer, it rewrites vendor/composer/installed.json after removing
+   * a package.
+   */
+  private function failUpdateChangingVendor(): void {
+    $this->scenario()->composer()->on('update', 'example/fail')
+      ->writes('composer.json', '{}')
+      ->writes('composer.lock', '{}')
+      ->removes('vendor/example/tools')
+      ->removes('vendor/bin/composer-lock-diff')
+      ->writes('vendor/composer/installed.json', '{"packages": [], "dev": true, "dev-package-names": []}')
+      ->fails('curl error 28: deliberate failed update');
   }
 
   /**

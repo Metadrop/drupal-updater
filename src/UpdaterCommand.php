@@ -636,7 +636,7 @@ Update includes:
     $this->printHeader2(sprintf('Updating: %s', $package));
     $state = new ComposerState();
     $required_tools = [];
-    foreach (['vendor/bin/drupal-updater', 'vendor/bin/composer-lock-diff'] as $tool) {
+    foreach (['vendor/bin/composer-lock-diff'] as $tool) {
       if (is_file($tool)) {
         $required_tools[] = $tool;
       }
@@ -879,12 +879,14 @@ Update includes:
     $this->output->writeln('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!');
     try {
       $state->restore();
-      // Restore installed dependencies without repeating project scripts or
-      // database operations. Composer plugins may still execute.
-      $this->runComposer('install', ['--no-interaction', '--no-progress', '--no-scripts']);
-      foreach ($required_tools as $tool) {
-        if (!is_file($tool)) {
-          throw new \RuntimeException('Required updater executable missing: ' . $tool);
+      if ($state->isVendorChanged()) {
+        // Reinstall what the restored lock says, without repeating project
+        // scripts. Composer plugins may still execute.
+        $this->runComposer('install', ['--no-interaction', '--no-progress', '--no-scripts']);
+        foreach ($required_tools as $tool) {
+          if (!is_file($tool)) {
+            throw new \RuntimeException('Required updater executable missing: ' . $tool);
+          }
         }
       }
     }
