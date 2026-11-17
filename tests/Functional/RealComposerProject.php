@@ -87,12 +87,21 @@ final class RealComposerProject extends FixtureProject {
    * Publishes one version of a package in the local repository.
    */
   private function publish(Package $package, string $version): void {
-    Filesystem::writeJson($this->path(sprintf('repository/%s/%s/composer.json', str_replace('/', '--', $package->name()), $version)), array_filter([
+    $directory = $this->path(sprintf('repository/%s/%s', str_replace('/', '--', $package->name()), $version));
+    Filesystem::writeJson($directory . '/composer.json', array_filter([
       'name' => $package->name(),
       'version' => $version,
       'type' => $package->type(),
       'require' => $package->requirements(),
+      'bin' => array_map(fn (string $name) => 'bin/' . $name, $package->binaries()),
     ]));
+    if ($package->binaries() !== [] && !is_dir($directory . '/bin')) {
+      mkdir($directory . '/bin');
+    }
+    foreach ($package->binaries() as $name) {
+      file_put_contents($directory . '/bin/' . $name, sprintf("#!/usr/bin/env php\n<?php\necho \"%s available\\n\";\n", $name));
+      chmod($directory . '/bin/' . $name, 0755);
+    }
   }
 
 }

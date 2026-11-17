@@ -46,6 +46,13 @@ final class Package {
   private array $advisories = [];
 
   /**
+   * Executables the package installs in vendor/bin, with the real Composer.
+   *
+   * @var list<string>
+   */
+  private array $binaries = [];
+
+  /**
    * Creates a package locked at the given version.
    */
   private function __construct(
@@ -79,6 +86,7 @@ final class Package {
     $package->dev = $data['dev'];
     $package->requires = $data['requires'];
     $package->advisories = $data['advisories'];
+    $package->binaries = $data['binaries'];
     return $package;
   }
 
@@ -139,6 +147,24 @@ final class Package {
       'severity' => $severity,
     ];
     return $this;
+  }
+
+  /**
+   * Declares an executable the real Composer installs in vendor/bin.
+   */
+  public function withBinary(string $name): self {
+    $this->binaries[] = $name;
+    return $this;
+  }
+
+  /**
+   * Gets the executables the package installs in vendor/bin.
+   *
+   * @return list<string>
+   *   Executable names.
+   */
+  public function binaries(): array {
+    return $this->binaries;
   }
 
   /**
@@ -226,6 +252,7 @@ final class Package {
       'dev' => $this->dev,
       'requires' => $this->requires,
       'advisories' => $this->advisories,
+      'binaries' => $this->binaries,
     ];
   }
 
