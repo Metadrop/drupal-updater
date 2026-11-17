@@ -74,8 +74,8 @@ explicit shell limit such as `timeout 2 composer ...` still takes effect.
 
 ## Development tests
 
-Local test setup and a reproducible base/head functional comparison are
-documented in [tests/README.md](tests/README.md).
+How to run the tests, and how to write new ones with the Composer and Drush
+simulator, is documented in [tests/README.md](tests/README.md).
 
 ## How it works
 
