@@ -10,6 +10,11 @@ interface ConfigInterface {
   const DEFAULT_COMMIT_AUTHOR = 'Drupal <drupal@update-helper>';
 
   /**
+   * Gets the timeout in seconds for Composer commands.
+   */
+  public function getComposerTimeout(): int;
+
+  /**
    * Get the commits author.
    *
    * @return string

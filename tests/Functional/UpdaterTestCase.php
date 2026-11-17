@@ -151,8 +151,8 @@ abstract class UpdaterTestCase extends TestCase {
   /**
    * Gets the environment in which composer and drush are the simulated ones.
    *
-   * @return array<string, string>
-   *   Environment variables.
+   * @return array<string, string|false>
+   *   Environment variables; FALSE removes an inherited one.
    */
   protected function simulatedEnvironment(): array {
     return [
@@ -160,6 +160,8 @@ abstract class UpdaterTestCase extends TestCase {
       'PWD' => $this->project()->path(),
       // Wide enough for the console not to wrap error messages.
       'COLUMNS' => '1000',
+      // "composer test" exports it, and the updater must be the one setting it.
+      'COMPOSER_PROCESS_TIMEOUT' => FALSE,
       SimulatorState::ENVIRONMENT_VARIABLE => $this->state()->directory(),
     ] + $this->composerEnvironment();
   }

@@ -86,7 +86,7 @@ final class ComposerSimulatorContractTest extends UpdaterTestCase {
    *
    * @param string $command
    *   Shell command line.
-   * @param array<string, string> $environment
+   * @param array<string, string|false> $environment
    *   Environment variables.
    */
   private function shell(string $command, array $environment): string {

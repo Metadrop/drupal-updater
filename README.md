@@ -58,7 +58,24 @@ The following variables can be setup through .drupal-updater.yml
 - **packages**: Allows specify which packages will be updated.
 - **limit**: Limit the number of direct packages to update in each drupal-updater run. Ignored when packages is provided.
 - **environments**: Array list of environments to update.
+- **composerTimeout**: Positive integer timeout in seconds for each Composer
+  command (default `300`). Sets both the Symfony Process timeout and the child
+  `COMPOSER_PROCESS_TIMEOUT`. Other commands retain their 300-second timeout.
 
+For example, allow up to 30 minutes for each Composer command:
+
+```yaml
+composerTimeout: 1800
+```
+
+This is a per-command limit, not a limit for the complete updater run. An
+explicit shell limit such as `timeout 2 composer ...` still takes effect.
+
+
+## Development tests
+
+How to run the tests, and how to write new ones with the Composer and Drush
+simulator, is documented in [tests/README.md](tests/README.md).
 
 ## How it works
 

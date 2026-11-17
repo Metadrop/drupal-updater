@@ -10,6 +10,20 @@ use Symfony\Component\Yaml\Yaml;
 class Config implements ConfigInterface {
 
   /**
+   * Composer process timeout, in seconds.
+   *
+   * @var int
+   */
+  protected int $composerTimeout = 300;
+
+  /**
+   * {@inheritdoc}
+   */
+  public function getComposerTimeout(): int {
+    return $this->composerTimeout;
+  }
+
+  /**
    * Commits author.
    *
    * @var string
@@ -175,6 +189,13 @@ class Config implements ConfigInterface {
 
     $instance = new self();
     $configuration = Yaml::parseFile($config_file);
+
+    if (array_key_exists('composerTimeout', $configuration ?? [])) {
+      if (!is_int($configuration['composerTimeout']) || $configuration['composerTimeout'] < 1) {
+        throw new \InvalidArgumentException('"composerTimeout" must be a positive integer in seconds.');
+      }
+      $instance->composerTimeout = $configuration['composerTimeout'];
+    }
 
     $string_fields = [
       'author',
