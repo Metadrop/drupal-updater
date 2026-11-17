@@ -32,18 +32,21 @@ final class UpdaterRun {
   }
 
   /**
-   * Gets one numbered section of the output, e.g. section('Report').
+   * Gets one section of the output, e.g. section('Report').
+   *
+   * Sections start at a printHeader1() header, numbered ("// 4. REPORT //")
+   * or not, and end at the next one.
    *
    * @param string $title
    *   Title of the section, as passed to printHeader1(), in any case.
    */
   public function section(string $title): string {
     $output = $this->output();
-    $header = sprintf('. %s //', strtoupper($title));
-    $start = strpos($output, $header);
-    Assert::assertNotFalse($start, sprintf("Section \"%s\" not found in the output:\n%s", $title, $output));
-    $start += strlen($header);
-    $end = preg_match('#\n// \d+\. #', $output, $match, PREG_OFFSET_CAPTURE, $start) === 1 ? $match[0][1] : strlen($output);
+    $header = sprintf('#^// (?:\d+\. )?%s //$#m', preg_quote(strtoupper($title), '#'));
+    $found = preg_match($header, $output, $match, PREG_OFFSET_CAPTURE);
+    Assert::assertSame(1, $found, sprintf("Section \"%s\" not found in the output:\n%s", $title, $output));
+    $start = $match[0][1] + strlen($match[0][0]);
+    $end = preg_match('#^// .+ //$#m', $output, $next, PREG_OFFSET_CAPTURE, $start) === 1 ? $next[0][1] : strlen($output);
     return substr($output, $start, $end - $start);
   }
 
