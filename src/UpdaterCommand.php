@@ -409,9 +409,7 @@ Update includes:
    */
   protected function checkPackages(): void {
     if ($this->getConfiguration()->onlyUpdateSecurities()) {
-      $package_list = $this
-        ->runCommand(sprintf('composer audit --locked %s --format plain 2>&1 | grep ^Package | cut -f2 -d: | sort -u', $this->getNoDevParameter()))
-        ->getOutput();
+      $package_list = $this->getPackagesWithAdvisories($this->getNoDevParameter());
     }
     else {
       $package_list = $this
@@ -871,6 +869,23 @@ Update includes:
   }
 
   /**
+   * Gets the packages with security advisories, one name per line.
+   *
+   * @param string $no_dev_parameter
+   *   The --no-dev option, or an empty string to include dev packages.
+   *
+   * @return string
+   *   Package names, sorted and without duplicates.
+   */
+  protected function getPackagesWithAdvisories(string $no_dev_parameter = ''): string {
+    // "cut -d:" keeps the space after "Package:"; sed removes it.
+    return $this->runCommand(sprintf(
+      'composer audit --locked %s --format plain 2>&1 | grep ^Package | cut -f2 -d: | sed "s/^ *//" | sort -u',
+      $no_dev_parameter,
+    ))->getOutput();
+  }
+
+  /**
    * Shows all the pending updates.
    */
   protected function showPendingUpdates(): void {
@@ -878,7 +893,7 @@ Update includes:
     if ($this->getConfiguration()->onlyUpdateSecurities()) {
       $this->printHeader2('Not Updated Securities:');
       $this->output->writeln(
-        $this->runCommand('composer audit --locked --format plain 2>&1 | grep ^Package | cut -f2 -d: | sort -u')->getOutput(),
+        $this->getPackagesWithAdvisories(),
       );
 
     }
@@ -897,7 +912,7 @@ Update includes:
       $this->output->writeln('');
       $this->printHeader2('Not Updated Securities (ALL):');
       $this->output->writeln(
-        trim($this->runCommand('composer audit --locked --format plain 2>&1 | grep ^Package | cut -f2 -d: | sort -u')->getOutput())
+        trim($this->getPackagesWithAdvisories())
       );
       $this->output->writeln("");
     }
