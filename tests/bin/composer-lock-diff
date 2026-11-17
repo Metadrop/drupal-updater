@@ -1,0 +1,11 @@
+#!/usr/bin/env php
+<?php
+
+/**
+ * @file
+ * Simulated composer-lock-diff for the functional tests; see tests/README.md.
+ */
+
+require dirname(__DIR__, 2) . '/vendor/autoload.php';
+
+exit(\DrupalUpdater\Tests\Simulator\Simulator::run('composer-lock-diff', array_slice($argv, 1)));

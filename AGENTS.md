@@ -17,12 +17,15 @@ composer install
 composer lint      # php -l over src/ and tests/
 composer phpcs     # Drupal coding standard (phpcs.xml.dist: src, tests, scripts)
 composer phpcbf    # autofix phpcs issues
-composer phpstan   # level 8, src/ only
+composer phpstan   # level 8, src/ and tests/
 composer test      # phpunit (tests/ suite, failOnWarning)
 vendor/bin/phpunit --filter SomeTest   # single test
 ```
 
-`tests/` currently holds only `.gitkeep`; there is no test suite yet.
+Functional tests run the real CLI against a temporary Git project, with Composer and Drush simulated
+through `tests/bin` (Git and composer-lock-diff are real). New tests extend
+`tests/Functional/UpdaterTestCase.php` and declare packages and scripted answers on its scenario; never
+add per-test fake executables. `tests/README.md` explains the base and how to extend the simulator.
 
 CI (`.github/workflows/`): PHPUnit + lint on PHP 8.1–8.5, and PHPCS + PHPStan on PHP 8.4, all with
 highest dependency versions. Code must stay compatible with that whole PHP range, with
