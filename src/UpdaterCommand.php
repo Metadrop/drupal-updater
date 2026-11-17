@@ -19,6 +19,12 @@ use Symfony\Component\Console\Helper\TableSeparator;
  * Updates drupal modules and packages.
  */
 class UpdaterCommand extends Command {
+
+  /**
+   * Timeout in seconds of the commands other than Composer.
+   */
+  const DEFAULT_TIMEOUT = 300;
+
   /**
    * Prints the output of the command.
    *
@@ -306,6 +312,10 @@ Update includes:
    *
    * @param string $command
    *   Command.
+   * @param int $timeout
+   *   Timeout in seconds.
+   * @param array<string, string> $environment
+   *   Environment variables added to the inherited ones.
    *
    * @return \Symfony\Component\Process\Process
    *   It can be used to obtain the command output if needed.
@@ -313,17 +323,11 @@ Update includes:
    * @throws \RuntimeException
    *   When the command fails.
    */
-  protected function runCommand(string $command) {
+  protected function runCommand(string $command, int $timeout = self::DEFAULT_TIMEOUT, array $environment = []) {
     $process = Process::fromShellCommandline($command);
-    // Match Composer itself, including an explicit shell timeout wrapper, but
-    // not other executables such as composer-lock-diff.
-    if (preg_match('/^\s*(?:timeout\s+\S+\s+)?composer\s/', $command)) {
-      $timeout = $this->getConfiguration()->getComposerTimeout();
-      $process->setTimeout($timeout);
-      $process->setEnv(['COMPOSER_PROCESS_TIMEOUT' => (string) $timeout]);
-    }
-    else {
-      $process->setTimeout(300);
+    $process->setTimeout($timeout);
+    if ($environment !== []) {
+      $process->setEnv($environment);
     }
     $process->run();
     if (!$process->isSuccessful()) {
@@ -333,18 +337,27 @@ Update includes:
   }
 
   /**
-   * Run a composer command.
+   * Runs Composer with the configured timeout.
    *
-   * @param string $command
-   *   Composer command.
-   * @param string[] $parameters
-   *   List of parameters the command needs.
+   * Every Composer call goes through here, so the timeout applies to all of
+   * them, also to Composer's own subprocesses (COMPOSER_PROCESS_TIMEOUT).
+   *
+   * @param string $arguments
+   *   Arguments after "composer", including any redirection or pipe.
+   * @param int|null $limit
+   *   Seconds after which the shell stops Composer and the rest of the
+   *   pipeline goes on without its output; NULL for no limit.
    *
    * @return \Symfony\Component\Process\Process
    *   Process result.
    */
-  protected function runComposer(string $command, array $parameters) {
-    return $this->runCommand(sprintf('composer %s %s', $command, implode(' ', $parameters)));
+  protected function runComposer(string $arguments, ?int $limit = NULL) {
+    $command = 'composer ' . $arguments;
+    if ($limit !== NULL) {
+      $command = sprintf('timeout %d %s', $limit, $command);
+    }
+    $timeout = $this->getConfiguration()->getComposerTimeout();
+    return $this->runCommand($command, $timeout, ['COMPOSER_PROCESS_TIMEOUT' => (string) $timeout]);
   }
 
   /**
@@ -422,7 +435,7 @@ Update includes:
     }
     else {
       $package_list = $this
-        ->runCommand(sprintf('composer show --locked --outdated --name-only %s 2>/dev/null', $this->getNoDevParameter()))
+        ->runComposer(sprintf('show --locked --outdated --name-only %s 2>/dev/null', $this->getNoDevParameter()))
         ->getOutput();
     }
     $package_list_massaged = $this->massagePackageList($package_list);
@@ -459,7 +472,7 @@ Update includes:
     }
 
     $direct_packages = $this->massagePackageList($this
-      ->runCommand(sprintf('composer show --locked --direct --name-only %s 2>/dev/null', $this->getNoDevParameter()))
+      ->runComposer(sprintf('show --locked --direct --name-only %s 2>/dev/null', $this->getNoDevParameter()))
       ->getOutput());
 
     $direct_packages_found = array_intersect($packages_list, $direct_packages);
@@ -490,20 +503,11 @@ Update includes:
    *   The direct package.
    */
   protected function findDirectPackage(string $package, array $direct_packages) {
-    $composer_why_recursive_timeout = 2;
-    $commands = [
-      sprintf("composer why %s --locked | awk '{print $1}'", $package),
-      sprintf("timeout %s composer why %s --locked -r | awk '{print $1}'", $composer_why_recursive_timeout, $package),
-    ];
+    $direct_package = $this->findPackageInPackageListCommand(sprintf("why %s --locked | awk '{print $1}'", $package), $direct_packages)
+      // The recursive search can be very slow: it gets 2 seconds at most.
+      ?? $this->findPackageInPackageListCommand(sprintf("why %s --locked -r | awk '{print $1}'", $package), $direct_packages, 2);
 
-    foreach ($commands as $command) {
-      $direct_package = $this->findPackageInPackageListCommand($command, $direct_packages);
-      if (!empty($direct_package)) {
-        return $direct_package;
-      }
-    }
-
-    return $package;
+    return $direct_package ?? $package;
   }
 
   /**
@@ -511,18 +515,20 @@ Update includes:
    *
    * This is used to get direct apckages from not direct packages.
    *
-   * @param string $command
-   *   List that return packages list.
+   * @param string $arguments
+   *   Composer arguments whose output is a list of packages.
    * @param string[] $package_list
    *   List of packages we want to look for.
+   * @param int|null $limit
+   *   Seconds after which Composer is stopped; NULL for no limit.
    *
    * @return string|null
    *   FIrst package from command that is present in package list.
    *
    * @see UpdaterCommand::findDirectPackage()
    */
-  protected function findPackageInPackageListCommand(string $command, array $package_list) {
-    $package_list_output = array_filter(explode("\n", (string) trim($this->runCommand($command)
+  protected function findPackageInPackageListCommand(string $arguments, array $package_list, ?int $limit = NULL) {
+    $package_list_output = array_filter(explode("\n", (string) trim($this->runComposer($arguments, $limit)
       ->getOutput())));
     foreach ($package_list_output as $package) {
       if (in_array($package, $package_list)) {
@@ -605,7 +611,7 @@ Update includes:
    */
   protected function getAllOutdatedPackages() {
     if (empty($this->outdatedPackages)) {
-      $this->outdatedPackages = json_decode($this->runCommand('composer show --locked --outdated --format json')->getOutput())->locked;
+      $this->outdatedPackages = json_decode($this->runComposer('show --locked --outdated --format json')->getOutput())->locked;
     }
     return $this->outdatedPackages;
   }
@@ -643,7 +649,7 @@ Update includes:
   protected function updatePackage(string $package): void {
     $this->printHeader2(sprintf('Updating: %s', $package));
     try {
-      $result = $this->runComposer('update', [$package, '--with-dependencies']);
+      $result = $this->runComposer(sprintf('update %s --with-dependencies', $package));
     }
     catch (\Exception $e) {
       $this->handlePackageUpdateErrors($e);
@@ -888,8 +894,8 @@ Update includes:
    */
   protected function getPackagesWithAdvisories(string $no_dev_parameter = ''): string {
     // "cut -d:" keeps the space after "Package:"; sed removes it.
-    return $this->runCommand(sprintf(
-      'composer audit --locked %s --format plain 2>&1 | grep ^Package | cut -f2 -d: | sed "s/^ *//" | sort -u',
+    return $this->runComposer(sprintf(
+      'audit --locked %s --format plain 2>&1 | grep ^Package | cut -f2 -d: | sed "s/^ *//" | sort -u',
       $no_dev_parameter,
     ))->getOutput();
   }
@@ -909,13 +915,13 @@ Update includes:
     else {
       $this->printHeader2('Not Updated Packages (Direct):');
       $this->output->writeln(
-        $this->runCommand('composer show --locked --outdated --direct')->getOutput()
+        $this->runComposer('show --locked --outdated --direct')->getOutput()
       );
 
       $this->output->writeln('');
       $this->printHeader2('Not Updated Packages (ALL):');
       $this->output->writeln(
-        $this->runCommand('composer show --locked --outdated')->getOutput()
+        $this->runComposer('show --locked --outdated')->getOutput()
       );
 
       $this->output->writeln('');
@@ -1014,7 +1020,7 @@ Update includes:
    *   TRUE when the package is a drupal extension.
    */
   protected function isDrupalExtension(string $package) {
-    $package_type = $this->runCommand(sprintf("composer show %s | grep ^type | awk '{print $3}'", $package))->getOutput();
+    $package_type = $this->runComposer(sprintf("show %s | grep ^type | awk '{print $3}'", $package))->getOutput();
     return $package_type != 'drupal-library' && str_starts_with($package_type, 'drupal');
   }
 
