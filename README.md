@@ -134,3 +134,6 @@ Example:
 
 
 [^1]: Using local composer (vendor/bin/composer) is discouraged. The drupal-updater command may update the self composer library and break the process with a Fatal error. Plus, generally, the composer binary is designed to be used globally.
+
+The final pending-update report prints an explicit message when a package or
+security category has no results, rather than leaving that category blank.
