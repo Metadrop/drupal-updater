@@ -1,6 +1,6 @@
 <?php
 
-namespace DrupalUpdater\Tests;
+namespace DrupalUpdater\Tests\Unit\Config;
 
 use DrupalUpdater\Config\Config;
 use PHPUnit\Framework\TestCase;
@@ -8,7 +8,7 @@ use PHPUnit\Framework\TestCase;
 /**
  * Tests the composerTimeout configuration key.
  */
-class TimeoutConfigTest extends TestCase {
+final class ComposerTimeoutConfigTest extends TestCase {
 
   /**
    * Tests the default timeout and a configured one.
