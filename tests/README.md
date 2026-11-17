@@ -61,6 +61,8 @@ final class ExampleTest extends UpdaterTestCase {
 `withLatest()` makes a newer version available, `asDrupalModule()` / `ofType()` set the type,
 `asTransitive()` and `asDev()` change how it is required, `requires()` adds a requirement and
 `withAdvisory()` makes `composer audit` report it until it is updated to its latest version.
+`withBinary($name)` adds an executable the real Composer installs in `vendor/bin` (see
+`useRealComposer()`).
 
 ### Rules: scripted answers
 

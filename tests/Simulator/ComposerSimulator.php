@@ -9,7 +9,8 @@ namespace DrupalUpdater\Tests\Simulator;
  * composer.json, and available versions and advisories from the scenario
  * packages. Dependency resolution is not simulated: "update" locks the
  * requested packages (and, with -w/-W, their requirements) at their latest
- * version. Any other command fails as unsupported.
+ * version, and "install" has nothing to install as there is no vendor folder.
+ * Any other command fails as unsupported.
  */
 final class ComposerSimulator extends ToolSimulator {
 
@@ -22,6 +23,7 @@ final class ComposerSimulator extends ToolSimulator {
       'why', 'depends' => $this->why($invocation),
       'audit' => $this->audit($invocation),
       'update', 'u', 'upgrade' => $this->update($invocation),
+      'install', 'i' => $this->install($invocation),
       default => $this->unsupported($invocation),
     };
   }
@@ -225,6 +227,14 @@ final class ComposerSimulator extends ToolSimulator {
     }
     $files->setLockedVersions($versions);
     $invocation->err("Writing lock file\n");
+    return 0;
+  }
+
+  /**
+   * Simulates "install": the simulated project has no vendor folder to fill.
+   */
+  private function install(Invocation $invocation): int {
+    $invocation->err("Installing dependencies from lock file (including require-dev)\nNothing to install, update or remove\n");
     return 0;
   }
 

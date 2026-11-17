@@ -31,6 +31,7 @@ final class ComposerSimulatorContractTest extends UpdaterTestCase {
     "composer show drupal/example | grep ^type | awk '{print $3}'",
     "composer show example/library | grep ^type | awk '{print $3}'",
     'composer audit --locked --format plain 2>/dev/null',
+    'composer install --no-interaction --no-progress --no-scripts',
     'composer audit --locked  --format plain 2>&1 | grep ^Package | cut -f2 -d: | sed "s/^ *//" | sort -u',
   ];
 

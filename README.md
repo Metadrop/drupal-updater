@@ -89,6 +89,42 @@ This module will try to update your dependencies based on how they are required 
 
 If a package has an available update and that update can't be done by running `composer update`, it won't do the upgrade. This means that not all packages will be upgraded, but most of them yes.
 
+Before each package update, the updater saves the current `composer.json` and
+`composer.lock`, including uncommitted requirements. If the Composer update
+fails, those files are restored, so earlier changes are kept instead of
+checking out older Composer files from Git. When the failed update had already
+changed the vendor folder, `composer install --no-interaction --no-progress
+--no-scripts` reinstalls the dependencies of the restored lock and the updater
+checks that `vendor/bin/composer-lock-diff` is still there. If any of that
+fails, the run stops with an error.
+
+Recovery skips project scripts; Composer plugins can still execute. It restores
+Composer state and dependencies, not database changes or arbitrary project files.
+
+### Final package issue report
+
+When package updates encounter problems, a final report lists the affected
+package, operation, and original reason:
+
+- **execution**: A Composer or Drush operation failed.
+- **constraint**: Composer reported a dependency conflict, or an available
+  update produced no compatible change under the current requirements.
+- **resolved**: A later successful package update changed a package involved
+  in an earlier Composer issue. The original reason is retained for context.
+
+An unrelated successful update does not clear a failure, and a Composer package
+change does not clear a Drush failure. Recorded issues are also printed if a
+later stage terminates with an exception. No empty report is printed for a run
+without package issues.
+
+This reporting change preserves the existing recovery behavior and exit codes.
+It does not add retries or a strict partial-failure exit mode.
+
+## Development tests
+
+How to run the tests, and how to write new ones with the Composer and Drush
+simulator, is documented in [tests/README.md](tests/README.md).
+
 ## Usage
 
 Basic update:
@@ -151,3 +187,11 @@ Example:
 
 
 [^1]: Using local composer (vendor/bin/composer) is discouraged. The drupal-updater command may update the self composer library and break the process with a Fatal error. Plus, generally, the composer binary is designed to be used globally.
+
+The final pending-update report prints an explicit message when a package or
+security category has no results, rather than leaving that category blank.
+
+When an available package update leaves the lock file unchanged, the updater
+suggests a `composer require vendor/package:version -W --dry-run` command to
+investigate dependency constraints. The suggested version is the reported
+latest version. The updater prints this diagnostic command without executing it.

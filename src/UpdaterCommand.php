@@ -5,6 +5,8 @@ namespace DrupalUpdater;
 use Composer\InstalledVersions;
 use DrupalUpdater\Config\Config;
 use DrupalUpdater\Config\ConfigInterface;
+use DrupalUpdater\PackageIssue\PackageIssue;
+use DrupalUpdater\PackageIssue\PackageIssueReport;
 use DrupalUpdater\PostUpdate\PostUpdateDDQG;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputInterface;
@@ -61,6 +63,11 @@ class UpdaterCommand extends Command {
   protected bool $showFullReport = TRUE;
 
   /**
+   * Package issues of the run, printed at its end.
+   */
+  protected PackageIssueReport $packageIssues;
+
+  /**
    * Total number of direct packages successfully updated.
    *
    * @var int
@@ -84,6 +91,7 @@ class UpdaterCommand extends Command {
     parent::__construct($name);
 
     $this->postUpdateProcessors[] = new PostUpdateDDQG();
+    $this->packageIssues = new PackageIssueReport();
   }
 
   /**
@@ -209,6 +217,19 @@ Update includes:
    * {@inheritdoc}
    */
   protected function execute(InputInterface $input, OutputInterface $output) : int {
+    $this->packageIssues = new PackageIssueReport();
+    try {
+      return $this->runUpdates();
+    }
+    finally {
+      $this->showPackageIssues();
+    }
+  }
+
+  /**
+   * Run the existing update workflow while retaining issues on early exit.
+   */
+  protected function runUpdates(): int {
     $this->runCommand('cp composer.lock composer.drupalupdater.lock');
     $this->printSummary();
     $this->printHeader1('1. Consolidating configuration');
@@ -648,11 +669,20 @@ Update includes:
    */
   protected function updatePackage(string $package): void {
     $this->printHeader2(sprintf('Updating: %s', $package));
+    $before = $this->lockedPackageVersions();
+    $state = new ComposerState();
+    $required_tools = [];
+    foreach (['vendor/bin/composer-lock-diff'] as $tool) {
+      if (is_file($tool)) {
+        $required_tools[] = $tool;
+      }
+    }
     try {
       $result = $this->runComposer(sprintf('update %s --with-dependencies', $package));
     }
     catch (\Exception $e) {
-      $this->handlePackageUpdateErrors($e);
+      $this->packageIssues->record(PackageIssue::composerFailure($package, $this->packageErrorReason($e), $before[$package] ?? NULL));
+      $this->handleComposerUpdateErrors($e, $state, $required_tools);
       return;
     }
 
@@ -661,6 +691,16 @@ Update includes:
     $available_update = $this->getAvailableUpdate($package);
     if (!empty($available_update) && !empty($available_update->latest) && !$composer_lock_is_changed) {
       $this->output->writeln(sprintf("Package %s has an update available to %s version. Due to composer.json constraints, it hasn't been updated.\n", $package, $available_update->latest));
+      // The cached outdated list may describe a version changed earlier in
+      // the run. Do not add a constraint if the locked package is now current.
+      if (($before[$package][0] ?? NULL) !== $available_update->latest) {
+        $this->packageIssues->record(PackageIssue::unchangedLock($package, $available_update->latest, $before[$package] ?? NULL));
+      }
+
+      $this->output->writeln(sprintf(
+        'For more information, run: composer require %s -W --dry-run',
+        escapeshellarg($package . ':' . $available_update->latest)
+      ), OutputInterface::OUTPUT_RAW);
 
       $error_output = trim($result->getOutput());
       $valid_errors = [
@@ -697,6 +737,7 @@ Update includes:
         }
       }
       catch (\Exception $e) {
+        $this->packageIssues->record(PackageIssue::drushFailure($package, $this->packageErrorReason($e), $before[$package] ?? NULL));
         $this->handlePackageUpdateErrors($e);
         return;
       }
@@ -718,6 +759,8 @@ Update includes:
 
     $this->runCommand(sprintf('git commit -m "%s" -m "%s" --author="%s" -n', $commit_message, $updated_packages, $this->getConfiguration()->getAuthor()));
     $this->updatedPackages++;
+    $changed_packages = array_keys(($composerLockDiff['changes'] ?? []) + ($composerLockDiff['changes-dev'] ?? []));
+    $this->packageIssues->resolveChanged($changed_packages, $this->lockedPackageVersions());
 
   }
 
@@ -866,13 +909,47 @@ Update includes:
   }
 
   /**
-   * Handle errors produced in a update.
-   *
-   * There are errors either in composer update or drush updb, in those
-   * case all the possible changes are reverted and the error message is shown.
+   * Restore dependencies after a failed Composer update.
    *
    * @param \Exception $e
-   *   Exception.
+   *   Original update failure.
+   * @param \DrupalUpdater\ComposerState $state
+   *   Working Composer files immediately before the update.
+   * @param string[] $required_tools
+   *   Updater executables present before the update.
+   *
+   * @throws \RuntimeException
+   *   If recovery cannot restore consistent dependencies and required tools.
+   */
+  protected function handleComposerUpdateErrors(\Exception $e, ComposerState $state, array $required_tools): void {
+    $this->output->writeln("\n!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
+    $error_ouput = $e instanceof ProcessFailedException ? $e->getProcess()->getErrorOutput() : $e->getMessage();
+    $this->output->writeln($error_ouput);
+    $this->output->writeln('Updating package FAILED: recovering previous state.');
+    $this->output->writeln('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!');
+    try {
+      $state->restore();
+      if ($state->isVendorChanged()) {
+        // Reinstall what the restored lock says, without repeating project
+        // scripts. Composer plugins may still execute.
+        $this->runComposer('install --no-interaction --no-progress --no-scripts');
+        foreach ($required_tools as $tool) {
+          if (!is_file($tool)) {
+            throw new \RuntimeException('Required updater executable missing: ' . $tool);
+          }
+        }
+      }
+    }
+    catch (\Exception $recovery_error) {
+      throw new \RuntimeException('Composer recovery failed; stopping to avoid inconsistent dependencies: ' . $recovery_error->getMessage(), 0, $recovery_error);
+    }
+  }
+
+  /**
+   * Preserve the existing error handler for the separate Drush update path.
+   *
+   * @param \Exception $e
+   *   Update failure.
    */
   protected function handlePackageUpdateErrors(\Exception $e): void {
     $this->output->writeln("\n!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
@@ -881,6 +958,56 @@ Update includes:
     $this->output->writeln('Updating package FAILED: recovering previous state.');
     $this->output->writeln('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!');
     $this->runCommand('git checkout composer.json composer.lock');
+  }
+
+  /**
+   * Gets the error output of a failed package update, or its message.
+   */
+  protected function packageErrorReason(\Exception $e): string {
+    $reason = $e instanceof ProcessFailedException ? trim($e->getProcess()->getErrorOutput()) : $e->getMessage();
+    return $reason !== '' ? $reason : $e->getMessage();
+  }
+
+  /**
+   * Gets a fingerprint of each locked package, to tell when it changes.
+   *
+   * Best effort: an unreadable lock gives no fingerprints rather than an
+   * error, so it never interrupts an update or its recovery.
+   *
+   * @return array<string, array<int, string|null>>
+   *   Version and source and dist references, keyed by package name.
+   */
+  protected function lockedPackageVersions(): array {
+    $contents = is_readable('composer.lock') ? file_get_contents('composer.lock') : FALSE;
+    $lock = json_decode($contents === FALSE ? '' : $contents, TRUE);
+    $versions = [];
+    if (!is_array($lock)) {
+      return $versions;
+    }
+    foreach (array_merge((array) ($lock['packages'] ?? []), (array) ($lock['packages-dev'] ?? [])) as $package) {
+      if (!is_array($package) || !isset($package['name'], $package['version']) || !is_string($package['name']) || !is_string($package['version'])) {
+        continue;
+      }
+      $versions[$package['name']] = [
+        $package['version'],
+        $package['source']['reference'] ?? NULL,
+        $package['dist']['reference'] ?? NULL,
+      ];
+    }
+    return $versions;
+  }
+
+  /**
+   * Prints the package update issues collected during the run.
+   */
+  protected function showPackageIssues(): void {
+    if ($this->packageIssues->isEmpty()) {
+      return;
+    }
+    $this->printHeader1('Package update issues');
+    foreach ($this->packageIssues->lines() as $line) {
+      $this->output->writeln($line, OutputInterface::OUTPUT_RAW);
+    }
   }
 
   /**
@@ -907,30 +1034,41 @@ Update includes:
 
     if ($this->getConfiguration()->onlyUpdateSecurities()) {
       $this->printHeader2('Not Updated Securities:');
-      $this->output->writeln(
+      $this->showPendingUpdateResult(
         $this->getPackagesWithAdvisories(),
+        'No pending security updates found.'
       );
 
     }
     else {
       $this->printHeader2('Not Updated Packages (Direct):');
-      $this->output->writeln(
-        $this->runComposer('show --locked --outdated --direct')->getOutput()
+      $this->showPendingUpdateResult(
+        $this->runComposer('show --locked --outdated --direct')->getOutput(),
+        'No pending direct package updates found.'
       );
 
       $this->output->writeln('');
       $this->printHeader2('Not Updated Packages (ALL):');
-      $this->output->writeln(
-        $this->runComposer('show --locked --outdated')->getOutput()
+      $this->showPendingUpdateResult(
+        $this->runComposer('show --locked --outdated')->getOutput(),
+        'No pending package updates found.'
       );
 
       $this->output->writeln('');
       $this->printHeader2('Not Updated Securities (ALL):');
-      $this->output->writeln(
-        trim($this->getPackagesWithAdvisories())
+      $this->showPendingUpdateResult(
+        trim($this->getPackagesWithAdvisories()),
+        'No pending security updates found.'
       );
       $this->output->writeln("");
     }
+  }
+
+  /**
+   * Print an explicit message instead of leaving an empty report category.
+   */
+  protected function showPendingUpdateResult(string $result, string $empty_message): void {
+    $this->output->writeln(trim($result) === '' ? $empty_message : $result);
   }
 
   /**
