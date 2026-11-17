@@ -92,7 +92,29 @@ final class ComposerSimulatorContractTest extends UpdaterTestCase {
     $process = Process::fromShellCommandline($command, $this->project()->path(), $environment);
     $process->setTimeout(60);
     $process->run();
-    return sprintf("[exit %d]\n%s", $process->getExitCode(), $process->getOutput());
+    return sprintf("[exit %d]\n%s", $process->getExitCode(), $this->normalizeJson($process->getOutput()));
+  }
+
+  /**
+   * Sorts JSON keys, whose order changes between Composer versions.
+   *
+   * The updater decodes JSON outputs, so only their content must match.
+   */
+  private function normalizeJson(string $output): string {
+    $data = json_decode($output, TRUE);
+    if (!is_array($data)) {
+      return $output;
+    }
+    $sort = function (array &$value) use (&$sort): void {
+      ksort($value);
+      foreach ($value as &$child) {
+        if (is_array($child)) {
+          $sort($child);
+        }
+      }
+    };
+    $sort($data);
+    return (string) json_encode($data, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES);
   }
 
   /**
