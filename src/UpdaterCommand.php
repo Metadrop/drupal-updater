@@ -5,6 +5,7 @@ namespace DrupalUpdater;
 use Composer\InstalledVersions;
 use DrupalUpdater\Config\Config;
 use DrupalUpdater\Config\ConfigInterface;
+use DrupalUpdater\Config\Dependencies;
 use DrupalUpdater\PackageIssue\PackageIssue;
 use DrupalUpdater\PackageIssue\PackageIssueReport;
 use DrupalUpdater\PostUpdate\PostUpdateDDQG;
@@ -112,6 +113,9 @@ Update includes:
     $this->addOption('packages', 'pl', InputOption::VALUE_OPTIONAL, 'Comma separated list of packages to update');
     $this->addOption('limit', 'l', InputOption::VALUE_OPTIONAL, 'Maximum number of direct packages to update. It must be integer positive, set to 0 for no limit.');
     $this->addOption('consolidate-configuration', 'cc', InputOption::VALUE_NEGATABLE, 'If false, configuration will not be consolidated.');
+    $this->addOption('with-dependencies', NULL, InputOption::VALUE_NONE, 'Update each package with its dependencies, except root requirements (default).');
+    $this->addOption('with-all-dependencies', NULL, InputOption::VALUE_NONE, 'Update each package with all its dependencies, root requirements included.');
+    $this->addOption('no-dependencies', NULL, InputOption::VALUE_NONE, 'Update each package without its dependencies.');
   }
 
   /**
@@ -162,6 +166,8 @@ Update includes:
       $this->getConfiguration()->setConsolidateConfiguration(FALSE);
     }
 
+    $this->mapDependenciesOption($input);
+
     $packages_to_update_parameter = $input->getOption('packages') ?? '';
     if (!empty($packages_to_update_parameter)) {
       $this->getConfiguration()->setPackages(explode(',', addslashes($packages_to_update_parameter)));
@@ -184,6 +190,28 @@ Update includes:
   }
 
   /**
+   * Maps the dependencies option to the configuration.
+   *
+   * @param \Symfony\Component\Console\Input\InputInterface $input
+   *   Input.
+   */
+  protected function mapDependenciesOption(InputInterface $input): void {
+    $options = [
+      'with-all-dependencies' => Dependencies::All,
+      'with-dependencies' => Dependencies::Transitive,
+      'no-dependencies' => Dependencies::None,
+    ];
+    $given = array_filter($options, fn (string $option) => $input->getOption($option), ARRAY_FILTER_USE_KEY);
+    if (count($given) > 1) {
+      throw new \InvalidArgumentException('Only one of --with-dependencies, --with-all-dependencies and --no-dependencies can be used.');
+    }
+
+    if (!empty($given)) {
+      $this->getConfiguration()->setDependencies(reset($given));
+    }
+  }
+
+  /**
    * Show users what config will be applied to the current update.
    */
   protected function logConfiguration(): void {
@@ -199,6 +227,8 @@ Update includes:
     if ($this->getConfiguration()->noDev()) {
       $this->output->writeln("Dev packages won't be updated");
     }
+
+    $this->output->writeln(sprintf('Dependencies: %s', $this->getConfiguration()->getDependencies()->value));
 
     if (!empty($this->getConfiguration()->getPackages())) {
       $this->output->writeln(sprintf('Selected packages: %s', implode(', ', $this->getConfiguration()->getPackages())));
@@ -678,7 +708,7 @@ Update includes:
       }
     }
     try {
-      $result = $this->runComposer(sprintf('update %s --with-dependencies', $package));
+      $result = $this->runComposer(trim(sprintf('update %s %s', $package, $this->getConfiguration()->getDependencies()->composerOption())));
     }
     catch (\Exception $e) {
       $this->packageIssues->record(PackageIssue::composerFailure($package, $this->packageErrorReason($e), $before[$package] ?? NULL));
