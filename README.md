@@ -58,6 +58,11 @@ The following variables can be setup through .drupal-updater.yml
 - **packages**: Allows specify which packages will be updated.
 - **limit**: Limit the number of direct packages to update in each drupal-updater run. Ignored when packages is provided.
 - **environments**: Array list of environments to update.
+- **dependencies**: Dependencies updated along with each package: `transitive`
+  (default, `composer update --with-dependencies`), `all`
+  (`--with-all-dependencies`, root requirements included) or `none` (only the
+  package). The `--with-dependencies`, `--with-all-dependencies` and
+  `--no-dependencies` options override it.
 - **composerTimeout**: Positive integer timeout in seconds for each Composer
   command (default `300`). Sets both the Symfony Process timeout and the child
   `COMPOSER_PROCESS_TIMEOUT`. Other commands retain their 300-second timeout.
@@ -142,6 +147,11 @@ Parameters allowed:
 - **--environment**: List of sites (drush alias) to be run on Drupal Multisites. The drush alias must be local.
 - **--packages**: Update only the mentioned packages.
   **--limit**: Limit the number of direct packages to update in each drupal-updater run. Ignored when packages is provided.
+- **--with-dependencies**: Update each package with its dependencies, except
+  the ones also required in the root `composer.json` (default).
+- **--with-all-dependencies**: Update each package with all its dependencies,
+  root requirements included.
+- **--no-dependencies**: Update each package alone, without its dependencies.
 
 Examples:
 
