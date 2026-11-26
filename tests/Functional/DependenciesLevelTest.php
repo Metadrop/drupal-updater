@@ -84,6 +84,55 @@ final class DependenciesLevelTest extends UpdaterTestCase {
   }
 
   /**
+   * Tests the real Composer updates a root requirement with "all".
+   */
+  public function testRealComposerUpdatesRootRequirementWithAll(): void {
+    $this->assertRootRequirementVersionWithRealComposer('all', '1.3.0');
+  }
+
+  /**
+   * Tests the real Composer keeps a root requirement with "indirect".
+   */
+  public function testRealComposerKeepsRootRequirementWithIndirect(): void {
+    $this->assertRootRequirementVersionWithRealComposer('indirect', '1.0.0');
+  }
+
+  /**
+   * Tests the real Composer keeps every dependency with "none".
+   */
+  public function testRealComposerKeepsDependenciesWithNone(): void {
+    $this->scenario()
+      ->package(Package::named('example/library', '1.0.0')->withLatest('1.1.0')->requires('example/dependency'))
+      ->package(Package::named('example/dependency', '1.0.0')->withLatest('1.3.0')->asTransitive());
+    $this->useRealComposer();
+
+    $this->runUpdater(['dependencies' => 'none'])->assertSuccessful();
+
+    $this->assertLockedVersion('example/library', '1.1.0');
+    $this->assertLockedVersion('example/dependency', '1.0.0');
+  }
+
+  /**
+   * Updates a library whose dependency the root also requires.
+   *
+   * @param string $level
+   *   Value of the dependencies configuration key.
+   * @param string $version
+   *   Expected version of the dependency.
+   */
+  private function assertRootRequirementVersionWithRealComposer(string $level, string $version): void {
+    $this->scenario()
+      ->package(Package::named('example/library', '1.0.0')->withLatest('1.1.0')->requires('example/dependency'))
+      ->package(Package::named('example/dependency', '1.0.0')->withLatest('1.3.0'));
+    $this->useRealComposer();
+
+    $this->runUpdater(['dependencies' => $level, 'packages' => ['example/library']])->assertSuccessful();
+
+    $this->assertLockedVersion('example/library', '1.1.0');
+    $this->assertLockedVersion('example/dependency', $version);
+  }
+
+  /**
    * Declares an outdated library requiring an outdated transitive package.
    */
   private function outdatedLibraryWithOutdatedDependency(): void {
