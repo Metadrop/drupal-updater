@@ -111,6 +111,16 @@ interface ConfigInterface {
   public function getConsolidateConfiguration();
 
   /**
+   * Sets the dependencies updated along with each package.
+   */
+  public function setDependencies(Dependencies $dependencies): void;
+
+  /**
+   * Gets the dependencies updated along with each package.
+   */
+  public function getDependencies(): Dependencies;
+
+  /**
    * Get the maximum number of direct packages to update.
    */
   public function setLimit(int $limit) : void;
