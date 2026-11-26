@@ -8,7 +8,7 @@ namespace DrupalUpdater\Config;
 enum Dependencies: string {
 
   case All = 'all';
-  case Transitive = 'transitive';
+  case Indirect = 'indirect';
   case None = 'none';
 
   /**
@@ -20,7 +20,7 @@ enum Dependencies: string {
   public function composerOption(): string {
     return match ($this) {
       self::All => '--with-all-dependencies',
-      self::Transitive => '--with-dependencies',
+      self::Indirect => '--with-dependencies',
       self::None => '',
     };
   }

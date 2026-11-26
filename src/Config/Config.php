@@ -70,7 +70,7 @@ class Config implements ConfigInterface {
   /**
    * Dependencies updated along with each package.
    */
-  protected Dependencies $dependencies = Dependencies::Transitive;
+  protected Dependencies $dependencies = Dependencies::Indirect;
 
   /**
    * If set, only this packages will be updated, along its dependencies.
@@ -219,7 +219,7 @@ class Config implements ConfigInterface {
     if (array_key_exists('dependencies', $configuration ?? [])) {
       $dependencies = is_string($configuration['dependencies']) ? Dependencies::tryFrom($configuration['dependencies']) : NULL;
       if ($dependencies === NULL) {
-        throw new \InvalidArgumentException('"dependencies" must be one of: all, transitive, none.');
+        throw new \InvalidArgumentException('"dependencies" must be one of: all, indirect, none.');
       }
       $instance->dependencies = $dependencies;
     }

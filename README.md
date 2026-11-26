@@ -58,7 +58,7 @@ The following variables can be setup through .drupal-updater.yml
 - **packages**: Allows specify which packages will be updated.
 - **limit**: Limit the number of direct packages to update in each drupal-updater run. Ignored when packages is provided.
 - **environments**: Array list of environments to update.
-- **dependencies**: Dependencies updated along with each package: `transitive`
+- **dependencies**: Dependencies updated along with each package: `indirect`
   (default, `composer update --with-dependencies`), `all`
   (`--with-all-dependencies`, root requirements included) or `none` (only the
   package). The `--with-dependencies`, `--with-all-dependencies` and

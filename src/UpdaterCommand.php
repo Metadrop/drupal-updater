@@ -198,7 +198,7 @@ Update includes:
   protected function mapDependenciesOption(InputInterface $input): void {
     $options = [
       'with-all-dependencies' => Dependencies::All,
-      'with-dependencies' => Dependencies::Transitive,
+      'with-dependencies' => Dependencies::Indirect,
       'no-dependencies' => Dependencies::None,
     ];
     $given = array_filter($options, fn (string $option) => $input->getOption($option), ARRAY_FILTER_USE_KEY);

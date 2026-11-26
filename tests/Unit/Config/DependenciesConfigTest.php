@@ -15,10 +15,10 @@ final class DependenciesConfigTest extends TestCase {
    * Tests the default level and the configured ones.
    */
   public function testDefaultAndConfiguredLevels(): void {
-    self::assertSame(Dependencies::Transitive, (new Config())->getDependencies());
-    self::assertSame(Dependencies::Transitive, $this->configuration('')->getDependencies());
+    self::assertSame(Dependencies::Indirect, (new Config())->getDependencies());
+    self::assertSame(Dependencies::Indirect, $this->configuration('')->getDependencies());
     self::assertSame(Dependencies::All, $this->configuration('dependencies: all')->getDependencies());
-    self::assertSame(Dependencies::Transitive, $this->configuration('dependencies: transitive')->getDependencies());
+    self::assertSame(Dependencies::Indirect, $this->configuration('dependencies: indirect')->getDependencies());
     self::assertSame(Dependencies::None, $this->configuration('dependencies: none')->getDependencies());
   }
 
@@ -42,7 +42,7 @@ final class DependenciesConfigTest extends TestCase {
    */
   public function testComposerOptions(): void {
     self::assertSame('--with-all-dependencies', Dependencies::All->composerOption());
-    self::assertSame('--with-dependencies', Dependencies::Transitive->composerOption());
+    self::assertSame('--with-dependencies', Dependencies::Indirect->composerOption());
     self::assertSame('', Dependencies::None->composerOption());
   }
 
